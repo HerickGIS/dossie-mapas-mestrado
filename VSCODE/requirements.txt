@@ -3,4 +3,3 @@ geopandas
 folium
 streamlit-folium
 plotly
-geobr
