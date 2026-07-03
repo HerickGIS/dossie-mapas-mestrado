@@ -23,7 +23,6 @@ mapas_disponiveis = {
     "Municípios": "data/dados_ppgeo_bh_municipios.geojson",
     "Rio Carmo Curso": "data/dados_ppgeo_bh_rio_carmo_curso.geojson",
     "Tipos de Solos (Pedologia)": "data/dados_ppgeo_bh_tipos_solos_pedologia.geojson",
-    "Vegetação": "data/dados_ppgeo_bh_vegetacao.geojson",
     "Vulnerabilidade Ambiental": "data/dados_ppgeo_bh_vulnerabilidade_ambiental.geojson",
     "Vulnerabilidade Natural": "data/dados_ppgeo_bh_vulnerabilidade_natural.geojson"
 }
