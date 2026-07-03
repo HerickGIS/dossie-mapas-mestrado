@@ -103,41 +103,25 @@ def obter_coluna_real(gdf, nome_camada):
 # =====================================================================
 # CONEXÃO API IBGE (SIDRA) NO MENU LATERAL
 # =====================================================================
-st.sidebar.header("🌐 Conexão de Dados")
-if st.sidebar.button("📥 Baixar Censo 2022 (IBGE Ao Vivo)", type="primary"):
-    with st.spinner("Consultando Tabela 4714 na API do SIDRA..."):
-        try:
-            import sidrapy
-            # Consulta RN (24) e PB (25)
-            rn = sidrapy.get_table(table_code="4714", territorial_level="6", ibge_territorial_code="24*")
-            pb = sidrapy.get_table(table_code="4714", territorial_level="6", ibge_territorial_code="25*")
-            
-            df_ibge = pd.concat([rn, pb], ignore_index=True)
-            df_ibge.columns = df_ibge.iloc[0] # Arruma o cabeçalho
-            df_ibge = df_ibge[1:] # Tira a linha suja
-            
-            # Limpa o texto (Ex: 'Mossoró - RN' vira 'MOSSORÓ')
-            df_ibge['NM_MUN_CLEAN'] = df_ibge['Município'].str.split(' - ').str[0].str.upper()
-            df_ibge['POP_2022'] = pd.to_numeric(df_ibge['Valor'], errors='coerce')
-            
-            # Puxa o mapa dos municípios locais para servir de âncora espacial
-            if "Municipios" in mapas_encontrados:
-                gdf_mun = carregar_mapa_fisico(str(mapas_encontrados["Municipios"]))
-                col_mun = obter_coluna_real(gdf_mun, "Municipios")
-                gdf_mun['NM_TEMP'] = gdf_mun[col_mun].astype(str).str.upper()
-                
-                # O Join de Tabela (Une geometria com API)
-                gdf_ibge_live = gdf_mun.merge(df_ibge[['NM_MUN_CLEAN', 'POP_2022']], left_on='NM_TEMP', right_on='NM_MUN_CLEAN', how='left')
-                
-                st.session_state["camada_ibge_live"] = gdf_ibge_live
-                st.sidebar.success("✅ Censo 2022 sincronizado! Camada disponível.")
-                st.rerun() # Atualiza a tela para o mapa aparecer na lista
-            else:
-                st.sidebar.error("Precisa do mapa 'Municipios' na pasta para ancorar a API.")
-        except Exception as e:
-            st.sidebar.error(f"Erro ao consultar IBGE: {e}. Verifique o sidrapy.")
+def carregar_ibge_local():
+    try:
+        df_ibge = pd.read_csv("data/dados_ibge_populacao.csv")
+        df_ibge['NM_MUN_CLEAN'] = df_ibge['Município'].str.split(' - ').str[0].str.upper()
+        df_ibge['POP_2022'] = pd.to_numeric(df_ibge['POP_2022'], errors='coerce')
+        
+        gdf_mun = carregar_mapa_fisico(str(mapas_encontrados["Municipios"]))
+        col_mun = obter_coluna_real(gdf_mun, "Municipios")
+        gdf_mun['NM_TEMP'] = gdf_mun[col_mun].astype(str).str.upper()
+        
+        gdf_ibge_fixo = gdf_mun.merge(df_ibge[['NM_MUN_CLEAN', 'POP_2022']], left_on='NM_TEMP', right_on='NM_MUN_CLEAN', how='left')
+        st.session_state["camada_ibge_live"] = gdf_ibge_fixo
+        st.sidebar.success("✅ Censo 2022 carregado com sucesso!")
+    except Exception as e:
+        st.sidebar.error(f"Erro ao ler CSV local: {e}")
 
-st.sidebar.markdown("---")
+st.sidebar.header("🌐 Dados Censitários")
+if st.sidebar.button("📂 Carregar Censo 2022 (Arquivo Local)"):
+    carregar_ibge_local()
 
 # =====================================================================
 # 6. CRIAÇÃO DE 3 ABAS
