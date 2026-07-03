@@ -6,8 +6,11 @@ import plotly.express as px
 from pathlib import Path
 import pandas as pd
 
-# 1. Configuração inicial da página
+# 1. Configuração inicial da página e Controle de Sessão (Memória)
 st.set_page_config(page_title="Dashboard BHRC", layout="wide", initial_sidebar_state="expanded")
+
+if "df_cruzamento" not in st.session_state:
+    st.session_state["df_cruzamento"] = None
 
 st.title("💧 Dashboard Analítico: Bacia Hidrográfica do Rio do Carmo")
 st.markdown("**Sistema de Apoio à Decisão: Ecodinâmica e Impacto Socioespacial**")
@@ -45,7 +48,7 @@ for arquivo in sorted(todos_arquivos):
     nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas").replace("Ibge", "IBGE")
     mapas_encontrados[nome_legivel] = arquivo
 
-# 4. COLUNAS DE ATRIBUTOS (MAPEAMENTO EXATO) - VÍRGULAS CORRIGIDAS
+# 4. COLUNAS DE ATRIBUTOS (MAPEAMENTO EXATO)
 colunas_principais = {
     "Vulnerabilidade Natural": "CLASSE",
     "Vulnerabilidade Ambiental": "CLASSE",
@@ -74,10 +77,10 @@ def carregar_mapa(caminho_arquivo: str):
 # =====================================================================
 # 6. CRIAÇÃO DE ABAS (TABS) PARA SEPARAR MAPA E CRUZAMENTO DE DADOS
 # =====================================================================
-aba_mapa, aba_cruzamento = st.tabs(["🗺️ Visualizador Cartográfico", "⚙️ Análise de Cruzamento Espacial (Spatial Join)"])
+aba_mapa, aba_cruzamento = st.tabs(["🗺️ Visualizador Cartográfico", "📊 Tabela Dinâmica e Cruzamento Espacial (Power BI)"])
 
 # ---------------------------------------------------------------------
-# ABA 1: O VISUALIZADOR CARTOGRÁFICO (O Dashboard Original)
+# ABA 1: O VISUALIZADOR CARTOGRÁFICO
 # ---------------------------------------------------------------------
 with aba_mapa:
     st.sidebar.header("⚙️ Painel de Controle (Aba Mapa)")
@@ -99,7 +102,6 @@ with aba_mapa:
             try:
                 gdf = carregar_mapa(str(caminho_do_mapa))
             except Exception:
-                st.sidebar.error(f"⚠️ Falha ao ler {nome_camada}.")
                 continue
                 
             col_classe = colunas_principais.get(nome_camada)
@@ -121,7 +123,6 @@ with aba_mapa:
 
             dados_para_mapa[nome_camada] = {"gdf": gdf, "col_classe": col_classe}
 
-            # LÓGICA ESPACIAL E SÓCIO-DEMOGRÁFICA
             if col_classe and col_classe in gdf.columns and not gdf.empty:
                 if "Vulnerabilidade" in nome_camada or "Uso" in nome_camada or "Geologia" in nome_camada:
                     gdf_calc = gdf.to_crs(epsg=31984) 
@@ -163,10 +164,8 @@ with aba_mapa:
         for idx, (nome_camada, info) in enumerate(dados_para_mapa.items()):
             gdf = info["gdf"]
             col_classe = info["col_classe"]
-            
             if gdf.empty: continue 
             if gdf.crs is not None and gdf.crs != "EPSG:4326": gdf = gdf.to_crs("EPSG:4326")
-
             fg = folium.FeatureGroup(name=nome_camada)
 
             def definir_estilo(feature, camada=nome_camada, coluna=col_classe, cor_idx=idx):
@@ -186,7 +185,6 @@ with aba_mapa:
                 highlight_function=lambda x: {'weight': 2, 'color': 'black', 'fillOpacity': 0.9},
                 tooltip=mostrar_tooltip
             ).add_to(fg)
-
             fg.add_to(m)
 
         folium.LayerControl(collapsed=False).add_to(m)
@@ -201,9 +199,7 @@ with aba_mapa:
             st.json(prop_limpas)
         else:
             st.markdown("*Clique em qualquer polígono no mapa para focar em seus atributos.*")
-        
         st.markdown("---")
-        
         if dados_para_graficos:
             for nome_camada, info in dados_para_graficos.items():
                 df_plot = info["df"]
@@ -211,20 +207,10 @@ with aba_mapa:
                 tipo_grafico = info["tipo"]
                 
                 if tipo_grafico == "area":
-                    fig = px.bar(
-                        df_plot, x='Area_km2', y=coluna_ref, orientation='h',
-                        title=f"📊 Área por Categoria: {nome_camada}",
-                        color=coluna_ref, color_discrete_map=cores_vulnerabilidade,
-                        text='Rotulo_Grafico', custom_data=['%']
-                    )
+                    fig = px.bar(df_plot, x='Area_km2', y=coluna_ref, orientation='h', title=f"📊 Área: {nome_camada}", color=coluna_ref, color_discrete_map=cores_vulnerabilidade, text='Rotulo_Grafico', custom_data=['%'])
                     eixo_x_titulo = "Área (km²)"
                 else:
-                    fig = px.bar(
-                        df_plot, x='Populacao', y=coluna_ref, orientation='h',
-                        title=f"👥 População Exposta por Vulnerabilidade",
-                        color=coluna_ref, color_discrete_map=cores_vulnerabilidade,
-                        text='Rotulo_Grafico', custom_data=['%']
-                    )
+                    fig = px.bar(df_plot, x='Populacao', y=coluna_ref, orientation='h', title=f"👥 População Exposta", color=coluna_ref, color_discrete_map=cores_vulnerabilidade, text='Rotulo_Grafico', custom_data=['%'])
                     eixo_x_titulo = "População (Habitantes)"
                 
                 fig.update_traces(textposition='outside')
@@ -232,48 +218,91 @@ with aba_mapa:
                 st.plotly_chart(fig, use_container_width=True)
 
 # ---------------------------------------------------------------------
-# ABA 2: O MOTOR DE CRUZAMENTO ESPACIAL (Equivalente ao JOIN do SQL)
+# ABA 2: MÓDULO TABELA DINÂMICA E CRUZAMENTO ESPACIAL (ESTILO POWER BI)
 # ---------------------------------------------------------------------
 with aba_cruzamento:
-    st.header("⚙️ Motor de Cruzamento Espacial Dinâmico")
-    st.markdown("""
-    Esta ferramenta funciona como um `JOIN` de banco de dados espacial (SQL). 
-    Ela sobrepõe duas camadas e recorta os dados da **Camada Alvo** usando as fronteiras da **Camada de Recorte**.
-    """)
+    st.header("📊 Análise Combinada e Tabela Dinâmica")
+    st.markdown("Cruze os limites de duas camadas (Ex: Municípios e Vulnerabilidade) e crie visualizações dinâmicas instantâneas.")
 
-    col_a, col_b = st.columns(2)
+    col_a, col_b, col_btn = st.columns([4, 4, 2])
     with col_a:
-        camada_alvo = st.selectbox("1. Camada Alvo (Ex: Setores IBGE ou Municípios):", list(mapas_encontrados.keys()), index=0)
+        camada_alvo = st.selectbox("1. Camada Principal (Base):", list(mapas_encontrados.keys()), index=0)
     with col_b:
-        camada_recorte = st.selectbox("2. Camada de Recorte (Ex: Vulnerabilidade ou Caatinga):", list(mapas_encontrados.keys()), index=1)
+        camada_recorte = st.selectbox("2. Camada de Recorte (Filtro Espacial):", list(mapas_encontrados.keys()), index=1)
+    with col_btn:
+        st.write("")
+        st.write("") # Espaçamento para alinhar o botão
+        executar = st.button("🚀 Processar Cruzamento", type="primary", use_container_width=True)
 
-    if st.button("🚀 Executar Cruzamento Espacial (Spatial Join)", type="primary"):
-        with st.spinner("Processando álgebra de mapas e relacionando tabelas..."):
+    # Executa o cálculo pesado e guarda na sessão
+    if executar:
+        with st.spinner("Processando álgebra de mapas e relacionando tabelas... Isso pode levar alguns segundos."):
             try:
-                # 1. Carrega os arquivos
-                gdf_alvo = carregar_mapa(str(mapas_encontrados[camada_alvo]))
-                gdf_recorte = carregar_mapa(str(mapas_encontrados[camada_recorte]))
+                gdf_alvo = carregar_mapa(str(mapas_encontrados[camada_alvo])).to_crs(epsg=31984)
+                gdf_recorte = carregar_mapa(str(mapas_encontrados[camada_recorte])).to_crs(epsg=31984)
                 
-                # 2. Converte para SIRGAS 2000 UTM 24S (Garante o alinhamento matemático exato)
-                gdf_alvo_utm = gdf_alvo.to_crs(epsg=31984)
-                gdf_recorte_utm = gdf_recorte.to_crs(epsg=31984)
+                # Spatial Join
+                resultado = gpd.sjoin(gdf_alvo, gdf_recorte, how="inner", predicate="intersects")
                 
-                # 3. O CRUZAMENTO (Spatial Join)
-                resultado = gpd.sjoin(gdf_alvo_utm, gdf_recorte_utm, how="inner", predicate="intersects")
-                
-                st.success(f"✅ Cruzamento concluído! O sistema encontrou **{len(resultado)}** intersecções.")
-                
-                # 4. Exibe o resultado (removendo a geometria pesada para a tabela ficar leve)
-                df_resultado = resultado.drop(columns=['geometry'])
-                st.dataframe(df_resultado, use_container_width=True)
-                
-                # 5. Permite que você baixe a tabela do cruzamento para usar na dissertação!
-                csv = df_resultado.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="💾 Baixar Resultado como CSV",
-                    data=csv,
-                    file_name='resultado_cruzamento_espacial.csv',
-                    mime='text/csv',
-                )
+                # Guarda na memória do site
+                st.session_state["df_cruzamento"] = resultado.drop(columns=['geometry'])
+                st.success(f"✅ Cruzamento concluído! O sistema gerou **{len(resultado)}** registros.")
             except Exception as e:
-                st.error(f"Erro ao processar o cruzamento espacial. Certifique-se de que os arquivos selecionados contêm polígonos válidos. Detalhe técnico: {e}")
+                st.error(f"Erro ao cruzar os dados. Detalhe técnico: {e}")
+
+    # Se já existir um cálculo guardado na memória, abre a Tabela Dinâmica
+    if st.session_state["df_cruzamento"] is not None:
+        df_join = st.session_state["df_cruzamento"]
+        st.markdown("---")
+        st.subheader("🎛️ Construtor de Tabela Dinâmica")
+        
+        # Filtra apenas colunas de texto/categorias e colunas numéricas
+        colunas_categoricas = df_join.select_dtypes(exclude=['number', 'geometry']).columns.tolist()
+        colunas_numericas = df_join.select_dtypes(include=['number']).columns.tolist()
+        
+        col_cx1, col_cx2, col_cx3 = st.columns(3)
+        with col_cx1:
+            # Eixo X ou Agrupamento Principal
+            agrupar_por = st.selectbox("Agrupar dados por (Categoria):", colunas_categoricas)
+        with col_cx2:
+            # Opção de contar os polígonos ou somar um valor (ex: População)
+            opcoes_valores = ["Contagem de Polígonos"] + colunas_numericas
+            valor_alvo = st.selectbox("Analisar Valor:", opcoes_valores)
+        with col_cx3:
+            # Função matemática
+            funcao = st.selectbox("Operação:", ["Soma", "Média"])
+
+        # Calcula a Tabela Dinâmica baseada na escolha do usuário
+        if valor_alvo == "Contagem de Polígonos":
+            df_pivot = df_join.groupby(agrupar_por).size().reset_index(name='Total de Ocorrências')
+            coluna_y = 'Total de Ocorrências'
+        else:
+            if funcao == "Soma":
+                df_pivot = df_join.groupby(agrupar_por)[valor_alvo].sum().reset_index()
+            else:
+                df_pivot = df_join.groupby(agrupar_por)[valor_alvo].mean().reset_index()
+            coluna_y = valor_alvo
+
+        # Renderiza os Gráficos Lado a Lado
+        st.markdown("<br>", unsafe_allow_html=True)
+        g1, g2 = st.columns(2)
+        
+        with g1:
+            fig_bar = px.bar(df_pivot, x=agrupar_por, y=coluna_y, title=f"📊 {funcao} de {coluna_y}", text_auto='.2f', color=agrupar_por, color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig_bar.update_layout(showlegend=False)
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
+        with g2:
+            fig_pie = px.pie(df_pivot, values=coluna_y, names=agrupar_por, title=f"🍩 Distribuição Proporcional", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        # Exibe a Tabela Bruta do Cruzamento
+        with st.expander("Visualizar Tabela de Dados Brutos"):
+            st.dataframe(df_join, use_container_width=True)
+            st.download_button(
+                label="💾 Exportar Tabela para Excel (CSV)",
+                data=df_join.to_csv(index=False).encode('utf-8'),
+                file_name='cruzamento_tabela_dinamica.csv',
+                mime='text/csv'
+            )
