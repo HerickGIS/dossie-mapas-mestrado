@@ -69,20 +69,38 @@ if coluna_classe is None:
 if coluna_classe is None:
     coluna_classe = gdf.columns[0]
 
-# Adiciona as camadas e renderiza
-folium.Choropleth(
-    geo_data=gdf,
-    data=gdf,
-    columns=[coluna_id, coluna_classe],
-    key_on=f'feature.properties.{coluna_id}',
-    fill_color="YlGnBu",
-    fill_opacity=0.7,
-    line_opacity=0.3,
-    legend_name=tema_selecionado,
-).add_to(m)
+# --- A SOLUÇÃO CARTOGRÁFICA PARA MAPAS CATEGÓRICOS ---
+# 1. Uma paleta de cores forte e distinta para as diferentes unidades de paisagem e sistemas
+paleta_cores = [
+    '#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', 
+    '#ffff33', '#a65628', '#f781bf', '#1b9e77', '#d95f02', '#7570b3'
+]
 
-folium.GeoJsonTooltip(fields=[coluna_classe]).add_to(
-    folium.GeoJson(gdf, style_function=lambda x: {"color": "transparent", "fillColor": "transparent"})
-).add_to(m)
+# 2. Criamos um dicionário vinculando cada classe de texto a uma cor fixa
+classes_unicas = gdf[coluna_classe].astype(str).unique()
+mapa_cores = {classe: paleta_cores[i % len(paleta_cores)] for i, classe in enumerate(classes_unicas)}
 
+# 3. Desenhamos os polígonos aplicando as cores categóricas individuais
+camada_tematica = folium.GeoJson(
+    gdf,
+    style_function=lambda feature: {
+        # Busca a cor da classe. Se não achar, pinta de cinza
+        'fillColor': mapa_cores.get(str(feature['properties'].get(coluna_classe, '')), '#999999'),
+        'color': 'black',        # Cor da borda do polígono
+        'weight': 0.5,           # Espessura da borda
+        'fillOpacity': 0.7,      # Transparência
+    }
+)
+
+# 4. Adicionamos a caixinha interativa (Tooltip) que aparece ao passar o mouse
+folium.GeoJsonTooltip(
+    fields=[coluna_classe],
+    aliases=[f"Classe/Categoria: "],
+    style=("background-color: white; color: #333333; font-family: arial; font-size: 13px; padding: 10px;")
+).add_to(camada_tematica)
+
+# 5. Anexa a camada processada ao mapa base
+camada_tematica.add_to(m)
+
+# Renderiza o mapa final na tela
 st_folium(m, width=1000, height=600)
