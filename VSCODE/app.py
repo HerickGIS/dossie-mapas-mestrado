@@ -12,7 +12,7 @@ st.title("💧 Dashboard Analítico: Bacia Hidrográfica do Rio do Carmo")
 st.markdown("**Sistema de Apoio à Decisão e Ecodinâmica**")
 
 # =====================================================================
-# 2. MÓDULO DE FUNDAMENTAÇÃO METODOLÓGICA
+# 2. MÓDULO DE FUNDAMENTAÇÃO METODOLÓGICA (Baseado na Dissertação)
 # =====================================================================
 with st.expander("📖 Metodologia e Modelagem Espacial (Jean Tricart)", expanded=False):
     st.markdown("""
@@ -24,11 +24,12 @@ with st.expander("📖 Metodologia e Modelagem Espacial (Jean Tricart)", expande
     with col1:
         st.subheader("Vulnerabilidade Natural (VN)")
         st.markdown("Avalia a suscetibilidade intrínseca do meio físico, calculada pela média aritmética dos pesos atribuídos às classes.")
-        st.latex(r"VN = \frac{Geomorfologia + Geologia + Pedologia + Vegetação + Uso e Cobertura da Terra}{5}")
+        # Utilizando \text{} para garantir que os espaços da nomenclatura fiquem corretos no renderizador matemático
+        st.latex(r"VN = \frac{\text{Geomorfologia} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso e Cobertura da Terra}}{5}")
     with col2:
         st.subheader("Vulnerabilidade Ambiental (VA)")
         st.markdown("Insere o peso da pressão antrópica. O fator 'Uso e Cobertura da Terra' recebe o peso dominante (0.5).")
-        st.latex(r"VA = 0.2 x [Geomorfologia] + 0.1 x [Geologia] + 0.1 x [Pedologia] + 0.1 x [Vegetação] + 0.5 x [Uso e Cobertura da Terra]")
+        st.latex(r"VA = 0.2[\text{Geomorfologia}] + 0.1[\text{Geologia}] + 0.1[\text{Pedologia}] + 0.1[\text{Vegetação}] + 0.5[\text{Uso e Cobertura da Terra}]")
 
 # 3. O RADAR AUTOMÁTICO DE ARQUIVOS
 BASE_DIR = Path(__file__).resolve().parent
@@ -46,7 +47,19 @@ for arquivo in sorted(todos_arquivos):
     nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas")
     mapas_encontrados[nome_legivel] = arquivo
 
-# 4. DICIONÁRIOS DE CORES
+# 4. COLUNAS DE ATRIBUTOS (MAPEAMENTO EXATO)
+colunas_principais = {
+    "Vulnerabilidade Natural": "CLASSE",
+    "Vulnerabilidade Ambiental": "CLASSE",
+    "Uso E Cobertura Do Solo": "CLASSE",
+    "Geologia": "CLASSE",
+    "Geomorfologia": "CLASSE",
+    "Tipos De Solos (Pedologia)": "CLASSE",
+    "Vegetacao": "CLASSE",
+    "Municipios": "NM_MUN"
+}
+
+# 5. DICIONÁRIOS DE CORES (Vulnerabilidade Ecodinâmica)
 cores_vulnerabilidade = {
     'MUITO BAIXA': '#1a9850', 'BAIXA': '#91cf60', 'MÉDIA': '#fee08b', 'MEDIA': '#fee08b',
     'ALTA': '#fc8d59', 'MUITO ALTA': '#d73027', 'SEM CLASSIFICAÇÃO': '#969696', 'SEM CLASSIFICACAO': '#969696'
@@ -57,9 +70,7 @@ paleta_generica = ['#377eb8', '#984ea3', '#ff7f00', '#a65628', '#f781bf']
 def carregar_mapa(caminho_arquivo: str): 
     return gpd.read_file(caminho_arquivo)
 
-# =====================================================================
-# 5. BARRA LATERAL (CONTROLE E SLICERS ESTILO POWER BI)
-# =====================================================================
+# 6. BARRA LATERAL E SLICERS
 st.sidebar.header("⚙️ Painel de Controle")
 camadas_selecionadas = st.sidebar.multiselect(
     "1. Ligue e desligue as variáveis no mapa:", 
@@ -67,7 +78,6 @@ camadas_selecionadas = st.sidebar.multiselect(
     default=["Vulnerabilidade Natural"] if "Vulnerabilidade Natural" in mapas_encontrados else [list(mapas_encontrados.keys())[0]]
 )
 
-# Dicionários para guardar os dados filtrados que vão renderizar o mapa e os gráficos
 dados_para_mapa = {}
 dados_para_graficos = {}
 
@@ -83,55 +93,56 @@ if camadas_selecionadas:
             st.sidebar.error(f"⚠️ Falha ao ler {nome_camada}.")
             continue
             
-        col_classe = next((col for col in gdf.columns if col.upper() in ["CLASSE", "VULNERABILIDADE", "NOME", "TIPO"]), None)
-        if not col_classe and len(gdf.columns) > 1:
-            col_classe = [col for col in gdf.columns if col != 'geometry'][0]
+        col_classe = colunas_principais.get(nome_camada)
+        
+        if not col_classe:
+            col_classe = next((col for col in gdf.columns if col.upper() in ["CLASSE", "VULNERABILIDADE", "NOME", "TIPO"]), None)
+            if not col_classe and len(gdf.columns) > 1:
+                col_classe = [col for col in gdf.columns if col != 'geometry'][0]
 
-        # SE EXISTIR CLASSE, CRIA O FILTRO DINÂMICO!
-        if col_classe:
-            # Transforma tudo em maiúsculo para padronizar
+        if col_classe and col_classe in gdf.columns:
             gdf[col_classe] = gdf[col_classe].astype(str).str.upper()
-            
-            # Pega todas as classes únicas disponíveis nesta camada
             classes_disponiveis = sorted(gdf[col_classe].unique())
             
-            # Cria o Slicer no menu lateral
             classes_filtradas = st.sidebar.multiselect(
                 f"Filtrar {nome_camada}:",
                 options=classes_disponiveis,
-                default=classes_disponiveis # Vem tudo selecionado por padrão
+                default=classes_disponiveis 
             )
             
-            # APLICA O FILTRO NO DATAFRAME ANTES DE IR PARA O MAPA
             gdf = gdf[gdf[col_classe].isin(classes_filtradas)]
 
-        # Salva o GDF já filtrado para desenhar o mapa depois
         dados_para_mapa[nome_camada] = {"gdf": gdf, "col_classe": col_classe}
 
-        # Processamento de Área para os Gráficos (Apenas se sobrou algum dado após o filtro)
-        if col_classe and not gdf.empty and ("Vulnerabilidade" in nome_camada or "Uso" in nome_camada or "Geologia" in nome_camada):
-            gdf_calc = gdf.to_crs(epsg=31984) # SIRGAS 2000 UTM 24S
+        # Cálculo de Estatística Espacial (% e Área)
+        if col_classe and col_classe in gdf.columns and not gdf.empty and ("Vulnerabilidade" in nome_camada or "Uso" in nome_camada or "Geologia" in nome_camada):
+            gdf_calc = gdf.to_crs(epsg=31984) 
             gdf_calc['Area_km2'] = gdf_calc.geometry.area / 10**6
             resumo = gdf_calc.groupby(col_classe)['Area_km2'].sum().reset_index()
             resumo['%'] = (resumo['Area_km2'] / resumo['Area_km2'].sum()) * 100
+            
+            # Arredondamentos para exibição profissional
+            resumo['Area_km2'] = resumo['Area_km2'].round(2)
+            resumo['%'] = resumo['%'].round(2)
+            
+            # Criação do rótulo combinado para o gráfico
+            resumo['Rotulo_Grafico'] = resumo['Area_km2'].astype(str) + " km² (" + resumo['%'].astype(str) + "%)"
+            
             dados_para_graficos[nome_camada] = {"df": resumo, "coluna": col_classe}
 
-# =====================================================================
-# 6. DIVISÃO DA TELA: MAPA (Esquerda) e PAINEL DE DADOS (Direita)
-# =====================================================================
+# 7. DIVISÃO DA TELA: MAPA E DADOS
 col_mapa, col_dados = st.columns([6, 4])
 
 with col_mapa:
     st.subheader("Visualizador Cartográfico")
     m = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles="CartoDB positron")
     
-    # Desenha as camadas filtradas no mapa
     for idx, (nome_camada, info) in enumerate(dados_para_mapa.items()):
         gdf = info["gdf"]
         col_classe = info["col_classe"]
         
         if gdf.empty:
-            continue # Pula a camada se o usuário tirou todas as opções no filtro
+            continue 
             
         if gdf.crs is not None and gdf.crs != "EPSG:4326":
             gdf = gdf.to_crs("EPSG:4326")
@@ -139,10 +150,11 @@ with col_mapa:
         fg = folium.FeatureGroup(name=nome_camada)
 
         def definir_estilo(feature, camada=nome_camada, coluna=col_classe, cor_idx=idx):
-            valor = str(feature['properties'].get(coluna, '')).strip().upper()
-            if "Vulnerabilidade" in camada:
-                cor = cores_vulnerabilidade.get(valor, '#969696')
-                return {'fillColor': cor, 'color': '#333333', 'weight': 0.5, 'fillOpacity': 0.8}
+            if coluna and coluna in feature['properties']:
+                valor = str(feature['properties'].get(coluna, '')).strip().upper()
+                if "Vulnerabilidade" in camada:
+                    cor = cores_vulnerabilidade.get(valor, '#969696')
+                    return {'fillColor': cor, 'color': '#333333', 'weight': 0.5, 'fillOpacity': 0.8}
             cor_generica = paleta_generica[cor_idx % len(paleta_generica)]
             return {'fillColor': cor_generica, 'color': '#333333', 'weight': 0.5, 'fillOpacity': 0.5}
 
@@ -151,7 +163,7 @@ with col_mapa:
             name=nome_camada,
             style_function=definir_estilo,
             highlight_function=lambda x: {'weight': 2, 'color': 'black', 'fillOpacity': 0.9},
-            tooltip=folium.GeoJsonTooltip(fields=[col_classe], aliases=["Classe: "]) if col_classe else None
+            tooltip=folium.GeoJsonTooltip(fields=[col_classe], aliases=["Classe/Categoria: "]) if col_classe and col_classe in gdf.columns else None
         ).add_to(fg)
 
         fg.add_to(m)
@@ -172,22 +184,37 @@ with col_dados:
     
     st.markdown("---")
     
-    # 7. GRÁFICOS INTERATIVOS SINCRONIZADOS
     if dados_para_graficos:
         for nome_camada, info in dados_para_graficos.items():
             df_plot = info["df"]
             coluna_ref = info["coluna"]
             
-            # Gráfico de barras horizontais (ótimo para comparar as áreas filtradas)
+            # Gráfico de barras com Percentual e Área integrados
             fig = px.bar(
                 df_plot, 
                 x='Area_km2', 
                 y=coluna_ref, 
                 orientation='h',
-                title=f"📊 Área por Classe: {nome_camada} (km²)",
+                title=f"📊 Representatividade Espacial: {nome_camada}",
                 color=coluna_ref,
                 color_discrete_map=cores_vulnerabilidade,
-                text_auto='.2f'
+                text='Rotulo_Grafico', # Puxa o rótulo completo com %
+                custom_data=['%']
             )
-            fig.update_layout(showlegend=False, xaxis_title="Área (km²)", yaxis_title="Classes", yaxis={'categoryorder':'total ascending'})
+            
+            fig.update_traces(textposition='outside')
+            fig.update_layout(
+                showlegend=False, 
+                xaxis_title="Área (km²)", 
+                yaxis_title="", 
+                yaxis={'categoryorder':'total ascending'},
+                margin=dict(r=150) # Espaço extra para o texto caber sem cortar
+            )
             st.plotly_chart(fig, use_container_width=True)
+            
+            # Tabela Resumo Expandível para consulta rápida dos dados da dissertação
+            with st.expander(f"Tabela de Atributos: {nome_camada}"):
+                df_visual = df_plot[[coluna_ref, 'Area_km2', '%']].rename(
+                    columns={coluna_ref: 'Classe', 'Area_km2': 'Área (km²)', '%': 'Porcentagem (%)'}
+                )
+                st.dataframe(df_visual, hide_index=True, use_container_width=True)
