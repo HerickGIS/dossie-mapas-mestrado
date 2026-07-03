@@ -1,8 +1,0 @@
-{
-"type": "FeatureCollection",
-"name": "dados_ppgeo_bh_massa_dagua",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::4674" } },
-"features": [
-
-]
-}
