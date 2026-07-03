@@ -218,3 +218,18 @@ with col_dados:
                     columns={coluna_ref: 'Classe', 'Area_km2': 'Área (km²)', '%': 'Porcentagem (%)'}
                 )
                 st.dataframe(df_visual, hide_index=True, use_container_width=True)
+
+# 1. Carrega o seu mapa da Ecodinâmica e o mapa do IBGE
+gdf_vulnerabilidade = gpd.read_file("data/dados_ppgeo_bh_vulnerabilidade_ambiental.geojson")
+gdf_ibge = gpd.read_file("data/dados_ibge_setores_carmo.geojson")
+
+# 2. Garante que os dois estão na mesma projeção métrica para o cálculo bater perfeitamente
+gdf_vuln_utm = gdf_vulnerabilidade.to_crs(epsg=31984)
+gdf_ibge_utm = gdf_ibge.to_crs(epsg=31984)
+
+# 3. O CRUZAMENTO ESPACIAL (A Análise Avançada)
+# Isso recorta os setores do IBGE usando os polígonos de Vulnerabilidade
+populacao_em_risco = gpd.sjoin(gdf_ibge_utm, gdf_vuln_utm, how="inner", predicate="intersects")
+
+# 4. Agrupa os dados para o Painel
+impacto_demografico = populacao_em_risco.groupby('CLASSE_VULNERABILIDADE')['POPULACAO_TOTAL'].sum().reset_index()
