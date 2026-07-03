@@ -4,13 +4,6 @@ import folium
 from streamlit_folium import st_folium
 import plotly.express as px
 from pathlib import Path
-import geobr
-
-# Descarrega todos os setores censitários do RN de 2022
-setores_rn = geobr.read_census_tract(code_tract="RN", year=2022)
-
-# Guarda como GeoJSON para usar no repositório do Dashboard
-setores_rn.to_file("data/dados_ibge_setores_rn.geojson", driver="GeoJSON")
 
 # 1. Configuração inicial da página
 st.set_page_config(page_title="Dashboard BHRC", layout="wide", initial_sidebar_state="expanded")
@@ -31,7 +24,6 @@ with st.expander("📖 Metodologia e Modelagem Espacial (Jean Tricart)", expande
     with col1:
         st.subheader("Vulnerabilidade Natural (VN)")
         st.markdown("Avalia a suscetibilidade intrínseca do meio físico, calculada pela média aritmética dos pesos atribuídos às classes.")
-        # Utilizando \text{} para garantir que os espaços da nomenclatura fiquem corretos no renderizador matemático
         st.latex(r"VN = \frac{\text{Geomorfologia} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso e Cobertura da Terra}}{5}")
     with col2:
         st.subheader("Vulnerabilidade Ambiental (VA)")
@@ -121,18 +113,15 @@ if camadas_selecionadas:
 
         dados_para_mapa[nome_camada] = {"gdf": gdf, "col_classe": col_classe}
 
-        # Cálculo de Estatística Espacial (% e Área)
         if col_classe and col_classe in gdf.columns and not gdf.empty and ("Vulnerabilidade" in nome_camada or "Uso" in nome_camada or "Geologia" in nome_camada):
             gdf_calc = gdf.to_crs(epsg=31984) 
             gdf_calc['Area_km2'] = gdf_calc.geometry.area / 10**6
             resumo = gdf_calc.groupby(col_classe)['Area_km2'].sum().reset_index()
             resumo['%'] = (resumo['Area_km2'] / resumo['Area_km2'].sum()) * 100
             
-            # Arredondamentos para exibição profissional
             resumo['Area_km2'] = resumo['Area_km2'].round(2)
             resumo['%'] = resumo['%'].round(2)
             
-            # Criação do rótulo combinado para o gráfico
             resumo['Rotulo_Grafico'] = resumo['Area_km2'].astype(str) + " km² (" + resumo['%'].astype(str) + "%)"
             
             dados_para_graficos[nome_camada] = {"df": resumo, "coluna": col_classe}
@@ -196,7 +185,6 @@ with col_dados:
             df_plot = info["df"]
             coluna_ref = info["coluna"]
             
-            # Gráfico de barras com Percentual e Área integrados
             fig = px.bar(
                 df_plot, 
                 x='Area_km2', 
@@ -205,7 +193,7 @@ with col_dados:
                 title=f"📊 Representatividade Espacial: {nome_camada}",
                 color=coluna_ref,
                 color_discrete_map=cores_vulnerabilidade,
-                text='Rotulo_Grafico', # Puxa o rótulo completo com %
+                text='Rotulo_Grafico', 
                 custom_data=['%']
             )
             
@@ -215,28 +203,12 @@ with col_dados:
                 xaxis_title="Área (km²)", 
                 yaxis_title="", 
                 yaxis={'categoryorder':'total ascending'},
-                margin=dict(r=150) # Espaço extra para o texto caber sem cortar
+                margin=dict(r=150) 
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # Tabela Resumo Expandível para consulta rápida dos dados da dissertação
             with st.expander(f"Tabela de Atributos: {nome_camada}"):
                 df_visual = df_plot[[coluna_ref, 'Area_km2', '%']].rename(
                     columns={coluna_ref: 'Classe', 'Area_km2': 'Área (km²)', '%': 'Porcentagem (%)'}
                 )
                 st.dataframe(df_visual, hide_index=True, use_container_width=True)
-
-# 1. Carrega o seu mapa da Ecodinâmica e o mapa do IBGE
-gdf_vulnerabilidade = gpd.read_file("data/dados_ppgeo_bh_vulnerabilidade_ambiental.geojson")
-gdf_ibge = gpd.read_file("data/dados_ibge_setores_carmo.geojson")
-
-# 2. Garante que os dois estão na mesma projeção métrica para o cálculo bater perfeitamente
-gdf_vuln_utm = gdf_vulnerabilidade.to_crs(epsg=31984)
-gdf_ibge_utm = gdf_ibge.to_crs(epsg=31984)
-
-# 3. O CRUZAMENTO ESPACIAL (A Análise Avançada)
-# Isso recorta os setores do IBGE usando os polígonos de Vulnerabilidade
-populacao_em_risco = gpd.sjoin(gdf_ibge_utm, gdf_vuln_utm, how="inner", predicate="intersects")
-
-# 4. Agrupa os dados para o Painel
-impacto_demografico = populacao_em_risco.groupby('CLASSE_VULNERABILIDADE')['POPULACAO_TOTAL'].sum().reset_index()
