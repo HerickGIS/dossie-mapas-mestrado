@@ -52,6 +52,7 @@ colunas_principais = {
     "Vegetacao": "CLASSE",
     "Municipios": "NM_MUN",
     "Drenagem ANA": "nooriginal",
+    "Rio Carmo Curso": "nooriginal",
     "Bacia Delimitacao": "nome_bacia",
     "IBGE Cruzamento Carmo": "CLASSE" # O arquivo do IBGE herdou a coluna da Ecodinâmica no cruzamento!
 }
