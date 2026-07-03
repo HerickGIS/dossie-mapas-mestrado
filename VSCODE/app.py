@@ -53,7 +53,7 @@ colunas_principais = {
     "Municipios": "NM_MUN",
     "Drenagem ANA": "nooriginal",
     "Bacia Delimitacao": "nome_bacia"
-    "Dados do IBGE": "CLASSE" # O arquivo do IBGE herdou a coluna da Ecodinâmica no cruzamento!
+    "IBGE Cruzamento Carmo": "CLASSE" # O arquivo do IBGE herdou a coluna da Ecodinâmica no cruzamento!
 }
 
 # 5. DICIONÁRIOS DE CORES
