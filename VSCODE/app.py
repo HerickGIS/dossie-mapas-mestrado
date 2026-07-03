@@ -14,7 +14,6 @@ mapas_disponiveis = {
     "Bacia Delimitação": "data/dados_ppgeo_bh_bacia_delimitacao.geojson",
     "Balanço Hídrico": "data/dados_ppgeo_bh_balanco_hidrico.geojson",
     "Clima": "data/dados_ppgeo_bh_clima.geojson",
-    "Declividade": "data/dados_ppgeo_bh_declividade.geojson",
     "Drenagem ANA": "data/dados_ppgeo_bh_drenagem_ANA.geojson",
     "Estações": "data/dados_ppgeo_bh_estacoes.geojson",
     "Estruturas": "data/dados_ppgeo_bh_estruturas.geojson",
@@ -24,8 +23,6 @@ mapas_disponiveis = {
     "Municípios": "data/dados_ppgeo_bh_municipios.geojson",
     "Rio Carmo Curso": "data/dados_ppgeo_bh_rio_carmo_curso.geojson",
     "Tipos de Solos (Pedologia)": "data/dados_ppgeo_bh_tipos_solos_pedologia.geojson",
-    "Uso e Cobertura do Solo": "data/dados_ppgeo_bh_uso_cobertura_solo.geojson",
-    "Uso do Solo MapBiomas": "data/dados_ppgeo_bh_uso_solo_MAP_BIOMAS.geojson",
     "Vegetação": "data/dados_ppgeo_bh_vegetacao.geojson",
     "Vulnerabilidade Ambiental": "data/dados_ppgeo_bh_vulnerabilidade_ambiental.geojson",
     "Vulnerabilidade Natural": "data/dados_ppgeo_bh_vulnerabilidade_natural.geojson"
