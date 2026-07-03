@@ -52,7 +52,7 @@ colunas_principais = {
     "Vegetacao": "CLASSE",
     "Municipios": "NM_MUN",
     "Drenagem ANA": "nooriginal",
-    "Bacia Delimitacao": "nome_bacia"
+    "Bacia Delimitacao": "nome_bacia",
     "IBGE Cruzamento Carmo": "CLASSE" # O arquivo do IBGE herdou a coluna da Ecodinâmica no cruzamento!
 }
 
@@ -127,6 +127,8 @@ if camadas_selecionadas:
                 # Tenta achar a coluna de população (o geobr usa 'pop_total', 'v0001', etc)
                 col_pop = next((c for c in gdf.columns if 'pop' in c.lower() or c == 'v0001'), None)
                 if col_pop:
+                    # Força a conversão para numérico, ignorando erros (caso venham textos)
+                    gdf[col_pop] = pd.to_numeric(gdf[col_pop], errors='coerce').fillna(0)
                     resumo_pop = gdf.groupby(col_classe)[col_pop].sum().reset_index()
                     resumo_pop.rename(columns={col_pop: 'Populacao'}, inplace=True)
                     resumo_pop['%'] = (resumo_pop['Populacao'] / resumo_pop['Populacao'].sum()) * 100
@@ -176,21 +178,24 @@ with col_mapa:
         def definir_estilo(feature, camada=nome_camada, coluna=col_classe, cor_idx=idx):
             if coluna and coluna in feature['properties']:
                 valor = str(feature['properties'].get(coluna, '')).strip().upper()
-                # Se for o cruzamento do IBGE, pinta com as mesmas cores da Vulnerabilidade
                 if "Vulnerabilidade" in camada or "IBGE" in camada.upper():
                     cor = cores_vulnerabilidade.get(valor, '#969696')
-                    # Setores do IBGE ficam com bordas mais finas e opacos para cruzamento visual
                     peso = 0.8 if "IBGE" in camada.upper() else 0.5
                     return {'fillColor': cor, 'color': '#000000', 'weight': peso, 'fillOpacity': 0.7}
             cor_generica = paleta_generica[cor_idx % len(paleta_generica)]
             return {'fillColor': cor_generica, 'color': '#333333', 'weight': 0.5, 'fillOpacity': 0.5}
+
+        # Verificação extra de segurança para o Tooltip
+        mostrar_tooltip = None
+        if col_classe and col_classe in gdf.columns:
+            mostrar_tooltip = folium.GeoJsonTooltip(fields=[col_classe], aliases=["Atributo: "])
 
         folium.GeoJson(
             gdf,
             name=nome_camada,
             style_function=definir_estilo,
             highlight_function=lambda x: {'weight': 2, 'color': 'black', 'fillOpacity': 0.9},
-            tooltip=folium.GeoJsonTooltip(fields=[col_classe], aliases=["Classe/Categoria: "]) if col_classe and col_classe in gdf.columns else None
+            tooltip=mostrar_tooltip
         ).add_to(fg)
 
         fg.add_to(m)
@@ -229,7 +234,6 @@ with col_dados:
                 )
                 eixo_x_titulo = "Área (km²)"
             else:
-                # O Gráfico Exclusivo Demográfico (IBGE)
                 fig = px.bar(
                     df_plot, x='Populacao', y=coluna_ref, orientation='h',
                     title=f"👥 População Exposta por Vulnerabilidade",
