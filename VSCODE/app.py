@@ -12,7 +12,7 @@ st.title("💧 Dashboard Analítico: Bacia Hidrográfica do Rio do Carmo")
 st.markdown("**Sistema de Apoio à Decisão e Ecodinâmica**")
 
 # =====================================================================
-# 2. MÓDULO DE FUNDAMENTAÇÃO METODOLÓGICA (O Retorno)
+# 2. MÓDULO DE FUNDAMENTAÇÃO METODOLÓGICA
 # =====================================================================
 with st.expander("📖 Metodologia e Modelagem Espacial (Jean Tricart)", expanded=False):
     st.markdown("""
@@ -28,7 +28,7 @@ with st.expander("📖 Metodologia e Modelagem Espacial (Jean Tricart)", expande
     with col2:
         st.subheader("Vulnerabilidade Ambiental (VA)")
         st.markdown("Insere o peso da pressão antrópica. O fator 'Uso e Cobertura da Terra' recebe o peso dominante (0.5).")
-        st.latex(r"VA = 0.2[Geomorfologia] + 0.1[Geologia] + 0.1[Pedologia] + 0.1[Vegetação] + 0.5[Uso e Cobertura da Terra]")
+        st.latex(r"VA = 0.2 x [Geomorfologia] + 0.1 x [Geologia] + 0.1 x [Pedologia] + 0.1 x [Vegetação] + 0.5 x [Uso e Cobertura da Terra]")
 
 # 3. O RADAR AUTOMÁTICO DE ARQUIVOS
 BASE_DIR = Path(__file__).resolve().parent
