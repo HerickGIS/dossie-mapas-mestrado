@@ -9,6 +9,7 @@ import pandas as pd
 # 1. Configuração inicial da página e Sessões de Memória (st.session_state)
 st.set_page_config(page_title="Dashboard BHRC", layout="wide", initial_sidebar_state="expanded")
 
+# Criando as "gavetas de memória" para que os dados não sumam ao interagir com a tela
 if "df_cruzamento" not in st.session_state:
     st.session_state["df_cruzamento"] = None
 if "gdf_microanalise" not in st.session_state:
@@ -78,23 +79,6 @@ paleta_generica = ['#377eb8', '#984ea3', '#ff7f00', '#a65628', '#f781bf', '#1b9e
 def carregar_mapa(caminho_arquivo: str): 
     return gpd.read_file(caminho_arquivo)
 
-# ---------------------------------------------------------------------
-# FUNÇÃO BLINDADA PARA DESCOBRIR A COLUNA REAL (Ignora Case Sensitive)
-# ---------------------------------------------------------------------
-def obter_coluna_real(gdf, nome_camada):
-    col_sugerida = colunas_principais.get(nome_camada)
-    if col_sugerida:
-        for col in gdf.columns:
-            if col.lower() == col_sugerida.lower():
-                return col
-    
-    col_fallback = next((col for col in gdf.columns if col.upper() in ["CLASSE", "VULNERABILIDADE", "NOME", "TIPO", "LEG_SINOT", "NM_UNIDADE", "NOME_UNIDA"]), None)
-    if col_fallback: 
-        return col_fallback
-    
-    colunas_validas = [col for col in gdf.columns if col != 'geometry']
-    return colunas_validas[0] if colunas_validas else None
-
 # =====================================================================
 # 6. CRIAÇÃO DE 3 ABAS
 # =====================================================================
@@ -126,7 +110,11 @@ with aba_mapa:
                 gdf = carregar_mapa(str(caminho_do_mapa))
             except: continue
                 
-            col_classe = obter_coluna_real(gdf, nome_camada)
+            col_classe = colunas_principais.get(nome_camada)
+            if not col_classe:
+                col_classe = next((col for col in gdf.columns if col.upper() in ["CLASSE", "VULNERABILIDADE", "NOME", "TIPO"]), None)
+                if not col_classe and len(gdf.columns) > 1:
+                    col_classe = [col for col in gdf.columns if col != 'geometry'][0]
 
             if col_classe and col_classe in gdf.columns:
                 gdf[col_classe] = gdf[col_classe].astype(str).str.upper()
@@ -230,26 +218,29 @@ with aba_cruzamento:
         with g2: st.plotly_chart(px.pie(df_pivot, values=coluna_y, names=agrupar_por, hole=0.4), use_container_width=True)
 
 # ---------------------------------------------------------------------
-# ABA 3: MICRO-ANÁLISE E RECORTES ESPACIAIS (O NOVO "CLIP") COM MEMÓRIA BLINDADA
+# ABA 3: MICRO-ANÁLISE E RECORTES ESPACIAIS (O NOVO "CLIP") COM MEMÓRIA
 # ---------------------------------------------------------------------
 with aba_microanalise:
     st.header("✂️ Micro-Análise (Recorte Geométrico)")
     st.markdown("""
-    Esta ferramenta recorta os polígonos de estudo usando os limites exatos de um atributo específico. 
+    Esta ferramenta recorta os polígonos de estudo (Ex: Vulnerabilidade) usando os limites exatos de um atributo específico (Ex: O município de Mossoró). 
     A área física será **recalculada na hora** baseada apenas nas fatias geométricas que sobrarem dentro do recorte.
     """)
 
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("1. O que você quer analisar?")
-        camada_estudo = st.selectbox("Camada de Estudo (Ex: Vegetação, Vulnerabilidade):", list(mapas_encontrados.keys()), index=0)
+        camada_estudo = st.selectbox("Camada de Estudo (Ex: Vulnerabilidade):", list(mapas_encontrados.keys()), index=0)
     
     with col2:
         st.subheader("2. Qual será a Faca de Recorte?")
         camada_mascara = st.selectbox("Camada Máscara (Ex: Municípios):", list(mapas_encontrados.keys()), index=1)
         
         gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
-        col_filtro = obter_coluna_real(gdf_mask_bruto, camada_mascara)
+        
+        col_filtro = colunas_principais.get(camada_mascara)
+        if not col_filtro or col_filtro not in gdf_mask_bruto.columns:
+            col_filtro = next((col for col in gdf_mask_bruto.columns if col not in ['geometry', 'id']), None)
         
         if col_filtro:
             valores_disponiveis = sorted(gdf_mask_bruto[col_filtro].astype(str).unique())
@@ -260,22 +251,14 @@ with aba_microanalise:
     st.markdown("---")
     executar_clip = st.button("✂️ Executar Recorte Geométrico e Recalcular Área", type="primary", use_container_width=True)
 
+    # Quando o botão é pressionado, calculamos e SALVAMOS na memória da sessão
     if executar_clip and col_filtro:
         with st.spinner(f"Fatiando polígonos e recalculando a área dentro de {valor_recorte}..."):
             try:
                 gdf_alvo = carregar_mapa(str(mapas_encontrados[camada_estudo])).to_crs(epsg=31984)
                 gdf_mask = carregar_mapa(str(mapas_encontrados[camada_mascara])).to_crs(epsg=31984)
                 
-                # 1. Isola a coluna certa do mapa alvo e remove as demais (evita erro de coluna duplicada)
-                col_alvo_real = obter_coluna_real(gdf_alvo, camada_estudo)
-                if col_alvo_real:
-                    gdf_alvo = gdf_alvo[[col_alvo_real, 'geometry']]
-                
-                # 2. Filtra a máscara para ter apenas o polígono escolhido (Ex: Só Mossoró)
                 mascara_filtrada = gdf_mask[gdf_mask[col_filtro].astype(str) == valor_recorte]
-                mascara_filtrada = mascara_filtrada[['geometry']] # Mantém só a geometria da faca
-                
-                # 3. O Recorte Espacial (Intersection)
                 gdf_recortado = gpd.overlay(gdf_alvo, mascara_filtrada, how="intersection")
                 
                 if gdf_recortado.empty:
@@ -283,15 +266,16 @@ with aba_microanalise:
                     st.session_state["gdf_microanalise"] = None
                 else:
                     gdf_recortado['Nova_Area_km2'] = gdf_recortado.geometry.area / 10**6
+                    # Salva o GeoDataFrame e as informações de legenda no cofre do navegador
                     st.session_state["gdf_microanalise"] = gdf_recortado
                     st.session_state["info_microanalise"] = {
                         "valor_recorte": valor_recorte, 
-                        "col_alvo": col_alvo_real
+                        "col_alvo": colunas_principais.get(camada_estudo, gdf_recortado.columns[0])
                     }
             except Exception as e:
                 st.error(f"Erro ao processar o recorte geométrico. Detalhes: {e}")
 
-    # Fora do botão, o código desenha a tela usando a Memória
+    # Fora do botão, o código verifica se há dados na memória para desenhar a tela
     if st.session_state["gdf_microanalise"] is not None:
         gdf_recortado = st.session_state["gdf_microanalise"]
         info_sessao = st.session_state["info_microanalise"]
@@ -336,4 +320,5 @@ with aba_microanalise:
                 tooltip=folium.GeoJsonTooltip(fields=[col_alvo], aliases=["Classe: "]) if col_alvo in gdf_recortado_wgs.columns else None
             ).add_to(m_clip)
             
+            # O st_folium aqui com return_on_hover=False garante interatividade limpa
             st_folium(m_clip, use_container_width=True, height=500, key="mapa_clip", return_on_hover=False)
