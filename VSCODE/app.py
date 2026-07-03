@@ -6,11 +6,16 @@ import plotly.express as px
 from pathlib import Path
 import pandas as pd
 
-# 1. Configuração inicial da página e Sessão
+# 1. Configuração inicial da página e Sessões de Memória (st.session_state)
 st.set_page_config(page_title="Dashboard BHRC", layout="wide", initial_sidebar_state="expanded")
 
+# Criando as "gavetas de memória" para que os dados não sumam ao interagir com a tela
 if "df_cruzamento" not in st.session_state:
     st.session_state["df_cruzamento"] = None
+if "gdf_microanalise" not in st.session_state:
+    st.session_state["gdf_microanalise"] = None
+if "info_microanalise" not in st.session_state:
+    st.session_state["info_microanalise"] = None
 
 st.title("💧 Dashboard Analítico: Bacia Hidrográfica do Rio do Carmo")
 st.markdown("**Sistema de Apoio à Decisão: Ecodinâmica e Impacto Socioespacial**")
@@ -75,7 +80,7 @@ def carregar_mapa(caminho_arquivo: str):
     return gpd.read_file(caminho_arquivo)
 
 # =====================================================================
-# 6. CRIAÇÃO DE 3 ABAS: MAPA, TABELA DINÂMICA E MICRO-ANÁLISE (NOVO)
+# 6. CRIAÇÃO DE 3 ABAS
 # =====================================================================
 aba_mapa, aba_cruzamento, aba_microanalise = st.tabs([
     "🗺️ Visualizador Principal", 
@@ -213,7 +218,7 @@ with aba_cruzamento:
         with g2: st.plotly_chart(px.pie(df_pivot, values=coluna_y, names=agrupar_por, hole=0.4), use_container_width=True)
 
 # ---------------------------------------------------------------------
-# ABA 3: MICRO-ANÁLISE E RECORTES ESPACIAIS (O NOVO "CLIP")
+# ABA 3: MICRO-ANÁLISE E RECORTES ESPACIAIS (O NOVO "CLIP") COM MEMÓRIA
 # ---------------------------------------------------------------------
 with aba_microanalise:
     st.header("✂️ Micro-Análise (Recorte Geométrico)")
@@ -231,7 +236,6 @@ with aba_microanalise:
         st.subheader("2. Qual será a Faca de Recorte?")
         camada_mascara = st.selectbox("Camada Máscara (Ex: Municípios):", list(mapas_encontrados.keys()), index=1)
         
-        # Carrega a máscara dinamicamente para ler suas colunas e valores
         gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
         
         col_filtro = colunas_principais.get(camada_mascara)
@@ -240,7 +244,6 @@ with aba_microanalise:
         
         if col_filtro:
             valores_disponiveis = sorted(gdf_mask_bruto[col_filtro].astype(str).unique())
-            # O usuário escolhe o polígono exato (ex: MOSSORÓ)
             valor_recorte = st.selectbox(f"Selecione o(a) {col_filtro} para o recorte:", valores_disponiveis)
         else:
             st.error("Não foi possível identificar uma coluna válida para filtragem nesta camada.")
@@ -248,68 +251,74 @@ with aba_microanalise:
     st.markdown("---")
     executar_clip = st.button("✂️ Executar Recorte Geométrico e Recalcular Área", type="primary", use_container_width=True)
 
+    # Quando o botão é pressionado, calculamos e SALVAMOS na memória da sessão
     if executar_clip and col_filtro:
-        with st.spinner(f"Fatiando polígonos e recalculando a área da Ecodinâmica dentro de {valor_recorte}..."):
+        with st.spinner(f"Fatiando polígonos e recalculando a área dentro de {valor_recorte}..."):
             try:
-                # 1. Carrega e Reprojeta
                 gdf_alvo = carregar_mapa(str(mapas_encontrados[camada_estudo])).to_crs(epsg=31984)
                 gdf_mask = carregar_mapa(str(mapas_encontrados[camada_mascara])).to_crs(epsg=31984)
                 
-                # 2. Filtra a máscara para ter apenas o polígono escolhido (Ex: Só Mossoró)
                 mascara_filtrada = gdf_mask[gdf_mask[col_filtro].astype(str) == valor_recorte]
-                
-                # 3. GEOPROCESSAMENTO: A ferramenta Clip/Intersection (Corta a geometria)
                 gdf_recortado = gpd.overlay(gdf_alvo, mascara_filtrada, how="intersection")
                 
                 if gdf_recortado.empty:
                     st.warning(f"As camadas não se cruzam fisicamente ou não há dados de {camada_estudo} dentro de {valor_recorte}.")
+                    st.session_state["gdf_microanalise"] = None
                 else:
-                    # 4. RECALCULA A ÁREA DAS NOVAS FATIAS GEOMÉTRICAS EM KM2
                     gdf_recortado['Nova_Area_km2'] = gdf_recortado.geometry.area / 10**6
-                    
-                    st.success(f"✅ Micro-análise em **{valor_recorte}** concluída com sucesso!")
-                    
-                    col_result_mapa, col_result_grafico = st.columns([6, 4])
-                    
-                    col_alvo = colunas_principais.get(camada_estudo, gdf_recortado.columns[0])
-                    
-                    # Gera o Gráfico com as áreas recalculadas
-                    with col_result_grafico:
-                        resumo_clip = gdf_recortado.groupby(col_alvo)['Nova_Area_km2'].sum().reset_index()
-                        resumo_clip['%'] = (resumo_clip['Nova_Area_km2'] / resumo_clip['Nova_Area_km2'].sum()) * 100
-                        resumo_clip['Nova_Area_km2'] = resumo_clip['Nova_Area_km2'].round(2)
-                        resumo_clip['%'] = resumo_clip['%'].round(2)
-                        
-                        fig_clip = px.pie(
-                            resumo_clip, values='Nova_Area_km2', names=col_alvo, 
-                            title=f"Distribuição em {valor_recorte}",
-                            color=col_alvo, color_discrete_map=cores_vulnerabilidade, hole=0.3
-                        )
-                        fig_clip.update_traces(textposition='inside', textinfo='percent+label')
-                        st.plotly_chart(fig_clip, use_container_width=True)
-                        
-                        st.dataframe(resumo_clip.rename(columns={col_alvo: 'Classe', 'Nova_Area_km2': 'Área Física Real (km²)'}), hide_index=True)
-
-                    # Desenha o novo mapa focando exclusivamente no recorte gerado
-                    with col_result_mapa:
-                        gdf_recortado_wgs = gdf_recortado.to_crs(epsg=4326)
-                        centro_y = gdf_recortado_wgs.geometry.centroid.y.mean()
-                        centro_x = gdf_recortado_wgs.geometry.centroid.x.mean()
-                        
-                        m_clip = folium.Map(location=[centro_y, centro_x], zoom_start=10, tiles="CartoDB positron")
-                        
-                        def estilo_clip(feature):
-                            valor = str(feature['properties'].get(col_alvo, '')).strip().upper()
-                            cor = cores_vulnerabilidade.get(valor, paleta_generica[0])
-                            return {'fillColor': cor, 'color': 'black', 'weight': 1, 'fillOpacity': 0.8}
-                        
-                        folium.GeoJson(
-                            gdf_recortado_wgs,
-                            style_function=estilo_clip,
-                            tooltip=folium.GeoJsonTooltip(fields=[col_alvo], aliases=["Classe: "]) if col_alvo in gdf_recortado_wgs.columns else None
-                        ).add_to(m_clip)
-                        
-                        st_folium(m_clip, use_container_width=True, height=500, key="mapa_clip")
-
+                    # Salva o GeoDataFrame e as informações de legenda no cofre do navegador
+                    st.session_state["gdf_microanalise"] = gdf_recortado
+                    st.session_state["info_microanalise"] = {
+                        "valor_recorte": valor_recorte, 
+                        "col_alvo": colunas_principais.get(camada_estudo, gdf_recortado.columns[0])
+                    }
             except Exception as e:
                 st.error(f"Erro ao processar o recorte geométrico. Detalhes: {e}")
+
+    # Fora do botão, o código verifica se há dados na memória para desenhar a tela
+    if st.session_state["gdf_microanalise"] is not None:
+        gdf_recortado = st.session_state["gdf_microanalise"]
+        info_sessao = st.session_state["info_microanalise"]
+        valor_recorte = info_sessao["valor_recorte"]
+        col_alvo = info_sessao["col_alvo"]
+
+        st.success(f"✅ Micro-análise em **{valor_recorte}** processada e ativa na sessão!")
+        
+        col_result_mapa, col_result_grafico = st.columns([6, 4])
+        
+        with col_result_grafico:
+            resumo_clip = gdf_recortado.groupby(col_alvo)['Nova_Area_km2'].sum().reset_index()
+            resumo_clip['%'] = (resumo_clip['Nova_Area_km2'] / resumo_clip['Nova_Area_km2'].sum()) * 100
+            resumo_clip['Nova_Area_km2'] = resumo_clip['Nova_Area_km2'].round(2)
+            resumo_clip['%'] = resumo_clip['%'].round(2)
+            
+            fig_clip = px.pie(
+                resumo_clip, values='Nova_Area_km2', names=col_alvo, 
+                title=f"Distribuição em {valor_recorte}",
+                color=col_alvo, color_discrete_map=cores_vulnerabilidade, hole=0.3
+            )
+            fig_clip.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_clip, use_container_width=True)
+            
+            st.dataframe(resumo_clip.rename(columns={col_alvo: 'Classe', 'Nova_Area_km2': 'Área Física Real (km²)'}), hide_index=True)
+
+        with col_result_mapa:
+            gdf_recortado_wgs = gdf_recortado.to_crs(epsg=4326)
+            centro_y = gdf_recortado_wgs.geometry.centroid.y.mean()
+            centro_x = gdf_recortado_wgs.geometry.centroid.x.mean()
+            
+            m_clip = folium.Map(location=[centro_y, centro_x], zoom_start=10, tiles="CartoDB positron")
+            
+            def estilo_clip(feature):
+                valor = str(feature['properties'].get(col_alvo, '')).strip().upper()
+                cor = cores_vulnerabilidade.get(valor, paleta_generica[0])
+                return {'fillColor': cor, 'color': 'black', 'weight': 1, 'fillOpacity': 0.8}
+            
+            folium.GeoJson(
+                gdf_recortado_wgs,
+                style_function=estilo_clip,
+                tooltip=folium.GeoJsonTooltip(fields=[col_alvo], aliases=["Classe: "]) if col_alvo in gdf_recortado_wgs.columns else None
+            ).add_to(m_clip)
+            
+            # O st_folium aqui com return_on_hover=False garante interatividade limpa
+            st_folium(m_clip, use_container_width=True, height=500, key="mapa_clip", return_on_hover=False)
