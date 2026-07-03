@@ -9,26 +9,22 @@ from pathlib import Path
 st.set_page_config(page_title="Dashboard BHRC", layout="wide", initial_sidebar_state="expanded")
 
 st.title("💧 Dashboard Analítico: Bacia Hidrográfica do Rio do Carmo")
-st.markdown("**Sistema de Apoio à Decisão e Ecodinâmica**")
+st.markdown("**Sistema de Apoio à Decisão: Ecodinâmica e Impacto Socioespacial**")
 
 # =====================================================================
-# 2. MÓDULO DE FUNDAMENTAÇÃO METODOLÓGICA (Baseado na Dissertação)
+# 2. MÓDULO DE FUNDAMENTAÇÃO METODOLÓGICA
 # =====================================================================
 with st.expander("📖 Metodologia e Modelagem Espacial (Jean Tricart)", expanded=False):
     st.markdown("""
-    A análise de vulnerabilidade desta bacia baseia-se nos princípios da **Ecodinâmica de Tricart (1977)**, que avalia a relação entre os processos de pedogênese (formação do solo) e morfogênese (degradação).
-    
-    A modelagem em Sistema de Informação Geográfica (SIG) foi realizada por meio de Álgebra de Mapas, integrando cinco variáveis biofísicas: **Geomorfologia, Geologia, Pedologia, Vegetação e Uso e Cobertura da Terra**.
+    A análise de vulnerabilidade desta bacia baseia-se nos princípios da **Ecodinâmica de Tricart (1977)**, integrando a dimensão do meio físico e a pressão antrópica.
     """)
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Vulnerabilidade Natural (VN)")
-        st.markdown("Avalia a suscetibilidade intrínseca do meio físico, calculada pela média aritmética dos pesos atribuídos às classes.")
-        st.latex(r"VN = \frac{\text{Geomorfologia} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso e Cobertura da Terra}}{5}")
+        st.latex(r"VN = \frac{\text{Geomorfo} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso e Cobertura}}{5}")
     with col2:
         st.subheader("Vulnerabilidade Ambiental (VA)")
-        st.markdown("Insere o peso da pressão antrópica. O fator 'Uso e Cobertura da Terra' recebe o peso dominante (0.5).")
-        st.latex(r"VA = 0.2[\text{Geomorfologia}] + 0.1[\text{Geologia}] + 0.1[\text{Pedologia}] + 0.1[\text{Vegetação}] + 0.5[\text{Uso e Cobertura da Terra}]")
+        st.latex(r"VA = 0.2[\text{Geomorfo}] + 0.1[\text{Geologia}] + 0.1[\text{Pedologia}] + 0.1[\text{Vegetação}] + 0.5[\text{Uso e Cobertura}]")
 
 # 3. O RADAR AUTOMÁTICO DE ARQUIVOS
 BASE_DIR = Path(__file__).resolve().parent
@@ -42,23 +38,25 @@ if not todos_arquivos:
 
 mapas_encontrados = {}
 for arquivo in sorted(todos_arquivos):
-    nome_legivel = arquivo.stem.replace("dados_ppgeo_bh_", "").replace("_", " ").title()
-    nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas")
+    nome_legivel = arquivo.stem.replace("dados_ppgeo_bh_", "").replace("dados_", "").replace("_", " ").title()
+    nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas").replace("Ibge", "IBGE")
     mapas_encontrados[nome_legivel] = arquivo
 
 # 4. COLUNAS DE ATRIBUTOS (MAPEAMENTO EXATO)
 colunas_principais = {
     "Vulnerabilidade Natural": "CLASSE",
     "Vulnerabilidade Ambiental": "CLASSE",
-    "Uso E Cobertura Do Solo": "CLASSE",
-    "Geologia": "CLASSE",
-    "Geomorfologia": "CLASSE",
-    "Tipos De Solos (Pedologia)": "CLASSE",
+    "Geologia": "NOME_UNIDA",
+    "Geomorfologia": "nm_unidade",
+    "Tipos De Solos (Pedologia)": "LEG_SINOT",
     "Vegetacao": "CLASSE",
-    "Municipios": "NM_MUN"
+    "Municipios": "NM_MUN",
+    "Drenagem ANA": "nooriginal",
+    "Bacia Delimitacao": "nome_bacia"
+    "Dados do IBGE": "CLASSE" # O arquivo do IBGE herdou a coluna da Ecodinâmica no cruzamento!
 }
 
-# 5. DICIONÁRIOS DE CORES (Vulnerabilidade Ecodinâmica)
+# 5. DICIONÁRIOS DE CORES
 cores_vulnerabilidade = {
     'MUITO BAIXA': '#1a9850', 'BAIXA': '#91cf60', 'MÉDIA': '#fee08b', 'MEDIA': '#fee08b',
     'ALTA': '#fc8d59', 'MUITO ALTA': '#d73027', 'SEM CLASSIFICAÇÃO': '#969696', 'SEM CLASSIFICACAO': '#969696'
@@ -93,7 +91,6 @@ if camadas_selecionadas:
             continue
             
         col_classe = colunas_principais.get(nome_camada)
-        
         if not col_classe:
             col_classe = next((col for col in gdf.columns if col.upper() in ["CLASSE", "VULNERABILIDADE", "NOME", "TIPO"]), None)
             if not col_classe and len(gdf.columns) > 1:
@@ -108,30 +105,61 @@ if camadas_selecionadas:
                 options=classes_disponiveis,
                 default=classes_disponiveis 
             )
-            
             gdf = gdf[gdf[col_classe].isin(classes_filtradas)]
 
         dados_para_mapa[nome_camada] = {"gdf": gdf, "col_classe": col_classe}
 
-        if col_classe and col_classe in gdf.columns and not gdf.empty and ("Vulnerabilidade" in nome_camada or "Uso" in nome_camada or "Geologia" in nome_camada):
-            gdf_calc = gdf.to_crs(epsg=31984) 
-            gdf_calc['Area_km2'] = gdf_calc.geometry.area / 10**6
-            resumo = gdf_calc.groupby(col_classe)['Area_km2'].sum().reset_index()
-            resumo['%'] = (resumo['Area_km2'] / resumo['Area_km2'].sum()) * 100
+        # LÓGICA ESPACIAL E SÓCIO-DEMOGRÁFICA
+        if col_classe and col_classe in gdf.columns and not gdf.empty:
+            # 1. Análise de Área (Padrão)
+            if "Vulnerabilidade" in nome_camada or "Uso" in nome_camada or "Geologia" in nome_camada:
+                gdf_calc = gdf.to_crs(epsg=31984) 
+                gdf_calc['Area_km2'] = gdf_calc.geometry.area / 10**6
+                resumo = gdf_calc.groupby(col_classe)['Area_km2'].sum().reset_index()
+                resumo['%'] = (resumo['Area_km2'] / resumo['Area_km2'].sum()) * 100
+                resumo['Area_km2'] = resumo['Area_km2'].round(2)
+                resumo['%'] = resumo['%'].round(2)
+                resumo['Rotulo_Grafico'] = resumo['Area_km2'].astype(str) + " km² (" + resumo['%'].astype(str) + "%)"
+                dados_para_graficos[nome_camada] = {"tipo": "area", "df": resumo, "coluna": col_classe}
             
-            resumo['Area_km2'] = resumo['Area_km2'].round(2)
-            resumo['%'] = resumo['%'].round(2)
-            
-            resumo['Rotulo_Grafico'] = resumo['Area_km2'].astype(str) + " km² (" + resumo['%'].astype(str) + "%)"
-            
-            dados_para_graficos[nome_camada] = {"df": resumo, "coluna": col_classe}
+            # 2. Análise Demográfica (IBGE)
+            elif "IBGE" in nome_camada.upper():
+                # Tenta achar a coluna de população (o geobr usa 'pop_total', 'v0001', etc)
+                col_pop = next((c for c in gdf.columns if 'pop' in c.lower() or c == 'v0001'), None)
+                if col_pop:
+                    resumo_pop = gdf.groupby(col_classe)[col_pop].sum().reset_index()
+                    resumo_pop.rename(columns={col_pop: 'Populacao'}, inplace=True)
+                    resumo_pop['%'] = (resumo_pop['Populacao'] / resumo_pop['Populacao'].sum()) * 100
+                    resumo_pop['%'] = resumo_pop['%'].round(2)
+                    resumo_pop['Rotulo_Grafico'] = resumo_pop['Populacao'].astype(int).astype(str) + " hab. (" + resumo_pop['%'].astype(str) + "%)"
+                    dados_para_graficos[nome_camada] = {"tipo": "populacao", "df": resumo_pop, "coluna": col_classe}
 
-# 7. DIVISÃO DA TELA: MAPA E DADOS
+# =====================================================================
+# 7. DIVISÃO DA TELA: MAPA (Esquerda) e DADOS (Direita)
+# =====================================================================
 col_mapa, col_dados = st.columns([6, 4])
 
 with col_mapa:
     st.subheader("Visualizador Cartográfico")
-    m = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles="CartoDB positron")
+    
+    # SETUP AVANÇADO DE BASEMAPS (Esri, TopoMap e CartoDB)
+    m = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles=None)
+    
+    folium.TileLayer('CartoDB positron', name='Mapa Base (Claro)', control=True).add_to(m)
+    folium.TileLayer(
+        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attr='Esri',
+        name='Satélite (Esri World Imagery)',
+        overlay=False,
+        control=True
+    ).add_to(m)
+    folium.TileLayer(
+        tiles='https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        attr='Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap',
+        name='Topografia e Hidrografia',
+        overlay=False,
+        control=True
+    ).add_to(m)
     
     for idx, (nome_camada, info) in enumerate(dados_para_mapa.items()):
         gdf = info["gdf"]
@@ -148,9 +176,12 @@ with col_mapa:
         def definir_estilo(feature, camada=nome_camada, coluna=col_classe, cor_idx=idx):
             if coluna and coluna in feature['properties']:
                 valor = str(feature['properties'].get(coluna, '')).strip().upper()
-                if "Vulnerabilidade" in camada:
+                # Se for o cruzamento do IBGE, pinta com as mesmas cores da Vulnerabilidade
+                if "Vulnerabilidade" in camada or "IBGE" in camada.upper():
                     cor = cores_vulnerabilidade.get(valor, '#969696')
-                    return {'fillColor': cor, 'color': '#333333', 'weight': 0.5, 'fillOpacity': 0.8}
+                    # Setores do IBGE ficam com bordas mais finas e opacos para cruzamento visual
+                    peso = 0.8 if "IBGE" in camada.upper() else 0.5
+                    return {'fillColor': cor, 'color': '#000000', 'weight': peso, 'fillOpacity': 0.7}
             cor_generica = paleta_generica[cor_idx % len(paleta_generica)]
             return {'fillColor': cor_generica, 'color': '#333333', 'weight': 0.5, 'fillOpacity': 0.5}
 
@@ -167,6 +198,9 @@ with col_mapa:
     folium.LayerControl(collapsed=False).add_to(m)
     mapa_interativo = st_folium(m, use_container_width=True, height=600, return_on_hover=False)
 
+# =====================================================================
+# 8. PAINEL DE INTELIGÊNCIA SÓCIO-ESPACIAL
+# =====================================================================
 with col_dados:
     st.subheader("Painel de Inteligência")
     
@@ -184,31 +218,32 @@ with col_dados:
         for nome_camada, info in dados_para_graficos.items():
             df_plot = info["df"]
             coluna_ref = info["coluna"]
+            tipo_grafico = info["tipo"]
             
-            fig = px.bar(
-                df_plot, 
-                x='Area_km2', 
-                y=coluna_ref, 
-                orientation='h',
-                title=f"📊 Representatividade Espacial: {nome_camada}",
-                color=coluna_ref,
-                color_discrete_map=cores_vulnerabilidade,
-                text='Rotulo_Grafico', 
-                custom_data=['%']
-            )
+            if tipo_grafico == "area":
+                fig = px.bar(
+                    df_plot, x='Area_km2', y=coluna_ref, orientation='h',
+                    title=f"📊 Área por Categoria: {nome_camada}",
+                    color=coluna_ref, color_discrete_map=cores_vulnerabilidade,
+                    text='Rotulo_Grafico', custom_data=['%']
+                )
+                eixo_x_titulo = "Área (km²)"
+            else:
+                # O Gráfico Exclusivo Demográfico (IBGE)
+                fig = px.bar(
+                    df_plot, x='Populacao', y=coluna_ref, orientation='h',
+                    title=f"👥 População Exposta por Vulnerabilidade",
+                    color=coluna_ref, color_discrete_map=cores_vulnerabilidade,
+                    text='Rotulo_Grafico', custom_data=['%']
+                )
+                eixo_x_titulo = "População (Habitantes)"
             
             fig.update_traces(textposition='outside')
             fig.update_layout(
-                showlegend=False, 
-                xaxis_title="Área (km²)", 
-                yaxis_title="", 
-                yaxis={'categoryorder':'total ascending'},
-                margin=dict(r=150) 
+                showlegend=False, xaxis_title=eixo_x_titulo, yaxis_title="", 
+                yaxis={'categoryorder':'total ascending'}, margin=dict(r=150) 
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            with st.expander(f"Tabela de Atributos: {nome_camada}"):
-                df_visual = df_plot[[coluna_ref, 'Area_km2', '%']].rename(
-                    columns={coluna_ref: 'Classe', 'Area_km2': 'Área (km²)', '%': 'Porcentagem (%)'}
-                )
-                st.dataframe(df_visual, hide_index=True, use_container_width=True)
+            with st.expander(f"Consultar Tabela: {nome_camada}"):
+                st.dataframe(df_plot.drop(columns=['Rotulo_Grafico']), hide_index=True, use_container_width=True)
