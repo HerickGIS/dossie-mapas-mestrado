@@ -4,6 +4,13 @@ import folium
 from streamlit_folium import st_folium
 import plotly.express as px
 from pathlib import Path
+import geobr
+
+# Descarrega todos os setores censitários do RN de 2022
+setores_rn = geobr.read_census_tract(code_tract="RN", year=2022)
+
+# Guarda como GeoJSON para usar no repositório do Dashboard
+setores_rn.to_file("data/dados_ibge_setores_rn.geojson", driver="GeoJSON")
 
 # 1. Configuração inicial da página
 st.set_page_config(page_title="Dashboard BHRC", layout="wide", initial_sidebar_state="expanded")
