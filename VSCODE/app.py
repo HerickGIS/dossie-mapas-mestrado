@@ -6,7 +6,7 @@ import plotly.express as px
 from pathlib import Path
 import pandas as pd
 
-# 1. Configuração inicial da página e Sessões de Memória (st.session_state)
+# 1. Configuração inicial da página e Sessões de Memória
 st.set_page_config(page_title="Dashboard BHRC", layout="wide", initial_sidebar_state="expanded")
 
 if "df_cruzamento" not in st.session_state:
@@ -15,6 +15,8 @@ if "gdf_microanalise" not in st.session_state:
     st.session_state["gdf_microanalise"] = None
 if "info_microanalise" not in st.session_state:
     st.session_state["info_microanalise"] = None
+if "camada_ibge_live" not in st.session_state:
+    st.session_state["camada_ibge_live"] = None
 
 st.title("💧 Dashboard Analítico: Bacia Hidrográfica do Rio do Carmo")
 st.markdown("**Sistema de Apoio à Decisão: Ecodinâmica e Impacto Socioespacial**")
@@ -49,8 +51,12 @@ if not todos_arquivos:
 mapas_encontrados = {}
 for arquivo in sorted(todos_arquivos):
     nome_legivel = arquivo.stem.replace("dados_ppgeo_bh_", "").replace("dados_", "").replace("_", " ").title()
-    nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas").replace("Ibge", "IBGE")
+    nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas")
     mapas_encontrados[nome_legivel] = arquivo
+
+# Se o IBGE Ao Vivo foi baixado, ele entra na lista de mapas como uma camada virtual!
+if st.session_state["camada_ibge_live"] is not None:
+    mapas_encontrados["Censo 2022 (Ao Vivo)"] = "VIRTUAL"
 
 # 4. COLUNAS DE ATRIBUTOS (MAPEAMENTO EXATO)
 colunas_principais = {
@@ -63,8 +69,7 @@ colunas_principais = {
     "Municipios": "NM_MUN",
     "Drenagem ANA": "nooriginal",
     "Bacia Delimitacao": "nome_bacia",
-    "IBGE Cruzamento Carmo": "CLASSE",
-    "Ibge Setores Rn": "NM_MUN" 
+    "Censo 2022 (Ao Vivo)": "NM_MUN" # A coluna de referência da camada viva
 }
 
 # 5. DICIONÁRIOS DE CORES
@@ -75,25 +80,64 @@ cores_vulnerabilidade = {
 paleta_generica = ['#377eb8', '#984ea3', '#ff7f00', '#a65628', '#f781bf', '#1b9e77', '#d95f02', '#7570b3']
 
 @st.cache_data(show_spinner=False)
-def carregar_mapa(caminho_arquivo: str): 
+def carregar_mapa_fisico(caminho_arquivo: str): 
     return gpd.read_file(caminho_arquivo)
 
-# ---------------------------------------------------------------------
-# FUNÇÃO BLINDADA PARA DESCOBRIR A COLUNA REAL (Ignora Case Sensitive)
-# ---------------------------------------------------------------------
+def obter_gdf(nome_camada):
+    """Função inteligente que decide se lê do HD ou da memória RAM"""
+    if nome_camada == "Censo 2022 (Ao Vivo)":
+        return st.session_state["camada_ibge_live"].copy()
+    return carregar_mapa_fisico(str(mapas_encontrados[nome_camada])).copy()
+
 def obter_coluna_real(gdf, nome_camada):
     col_sugerida = colunas_principais.get(nome_camada)
     if col_sugerida:
         for col in gdf.columns:
             if col.lower() == col_sugerida.lower():
                 return col
-    
     col_fallback = next((col for col in gdf.columns if col.upper() in ["CLASSE", "VULNERABILIDADE", "NOME", "TIPO", "LEG_SINOT", "NM_UNIDADE", "NOME_UNIDA"]), None)
-    if col_fallback: 
-        return col_fallback
-    
+    if col_fallback: return col_fallback
     colunas_validas = [col for col in gdf.columns if col != 'geometry']
     return colunas_validas[0] if colunas_validas else None
+
+# =====================================================================
+# CONEXÃO API IBGE (SIDRA) NO MENU LATERAL
+# =====================================================================
+st.sidebar.header("🌐 Conexão de Dados")
+if st.sidebar.button("📥 Baixar Censo 2022 (IBGE Ao Vivo)", type="primary"):
+    with st.spinner("Consultando Tabela 4714 na API do SIDRA..."):
+        try:
+            import sidrapy
+            # Consulta RN (24) e PB (25)
+            rn = sidrapy.get_table(table_code="4714", territorial_level="6", ibge_territorial_code="24*")
+            pb = sidrapy.get_table(table_code="4714", territorial_level="6", ibge_territorial_code="25*")
+            
+            df_ibge = pd.concat([rn, pb], ignore_index=True)
+            df_ibge.columns = df_ibge.iloc[0] # Arruma o cabeçalho
+            df_ibge = df_ibge[1:] # Tira a linha suja
+            
+            # Limpa o texto (Ex: 'Mossoró - RN' vira 'MOSSORÓ')
+            df_ibge['NM_MUN_CLEAN'] = df_ibge['Município'].str.split(' - ').str[0].str.upper()
+            df_ibge['POP_2022'] = pd.to_numeric(df_ibge['Valor'], errors='coerce')
+            
+            # Puxa o mapa dos municípios locais para servir de âncora espacial
+            if "Municipios" in mapas_encontrados:
+                gdf_mun = carregar_mapa_fisico(str(mapas_encontrados["Municipios"]))
+                col_mun = obter_coluna_real(gdf_mun, "Municipios")
+                gdf_mun['NM_TEMP'] = gdf_mun[col_mun].astype(str).str.upper()
+                
+                # O Join de Tabela (Une geometria com API)
+                gdf_ibge_live = gdf_mun.merge(df_ibge[['NM_MUN_CLEAN', 'POP_2022']], left_on='NM_TEMP', right_on='NM_MUN_CLEAN', how='left')
+                
+                st.session_state["camada_ibge_live"] = gdf_ibge_live
+                st.sidebar.success("✅ Censo 2022 sincronizado! Camada disponível.")
+                st.rerun() # Atualiza a tela para o mapa aparecer na lista
+            else:
+                st.sidebar.error("Precisa do mapa 'Municipios' na pasta para ancorar a API.")
+        except Exception as e:
+            st.sidebar.error(f"Erro ao consultar IBGE: {e}. Verifique o sidrapy.")
+
+st.sidebar.markdown("---")
 
 # =====================================================================
 # 6. CRIAÇÃO DE 3 ABAS
@@ -121,9 +165,8 @@ with aba_mapa:
         st.sidebar.markdown("---")
         st.sidebar.subheader("🎯 Filtros Interativos (Slicers)")
         for nome_camada in camadas_selecionadas:
-            caminho_do_mapa = mapas_encontrados[nome_camada]
             try:
-                gdf = carregar_mapa(str(caminho_do_mapa))
+                gdf = obter_gdf(nome_camada)
             except: continue
                 
             col_classe = obter_coluna_real(gdf, nome_camada)
@@ -137,7 +180,17 @@ with aba_mapa:
             dados_para_mapa[nome_camada] = {"gdf": gdf, "col_classe": col_classe}
 
             if col_classe and col_classe in gdf.columns and not gdf.empty:
-                if "Vulnerabilidade" in nome_camada or "Uso" in nome_camada or "Geologia" in nome_camada:
+                if "Censo 2022" in nome_camada:
+                    # Lógica para o IBGE Ao Vivo
+                    if 'POP_2022' in gdf.columns:
+                        resumo_pop = gdf.groupby(col_classe)['POP_2022'].sum().reset_index()
+                        resumo_pop.rename(columns={'POP_2022': 'Populacao'}, inplace=True)
+                        resumo_pop['%'] = (resumo_pop['Populacao'] / resumo_pop['Populacao'].sum()) * 100
+                        resumo_pop['%'] = resumo_pop['%'].round(2)
+                        resumo_pop['Rotulo_Grafico'] = resumo_pop['Populacao'].astype(int).astype(str) + " hab. (" + resumo_pop['%'].astype(str) + "%)"
+                        dados_para_graficos[nome_camada] = {"tipo": "populacao", "df": resumo_pop, "coluna": col_classe}
+                else:
+                    # Mapas Físicos Normais
                     gdf_calc = gdf.to_crs(epsg=31984) 
                     gdf_calc['Area_km2'] = gdf_calc.geometry.area / 10**6
                     resumo = gdf_calc.groupby(col_classe)['Area_km2'].sum().reset_index()
@@ -146,17 +199,6 @@ with aba_mapa:
                     resumo['%'] = resumo['%'].round(2)
                     resumo['Rotulo_Grafico'] = resumo['Area_km2'].astype(str) + " km² (" + resumo['%'].astype(str) + "%)"
                     dados_para_graficos[nome_camada] = {"tipo": "area", "df": resumo, "coluna": col_classe}
-                
-                elif "IBGE" in nome_camada.upper():
-                    col_pop = next((c for c in gdf.columns if 'pop' in c.lower() or c == 'v0001'), None)
-                    if col_pop:
-                        gdf[col_pop] = pd.to_numeric(gdf[col_pop], errors='coerce').fillna(0)
-                        resumo_pop = gdf.groupby(col_classe)[col_pop].sum().reset_index()
-                        resumo_pop.rename(columns={col_pop: 'Populacao'}, inplace=True)
-                        resumo_pop['%'] = (resumo_pop['Populacao'] / resumo_pop['Populacao'].sum()) * 100
-                        resumo_pop['%'] = resumo_pop['%'].round(2)
-                        resumo_pop['Rotulo_Grafico'] = resumo_pop['Populacao'].astype(int).astype(str) + " hab. (" + resumo_pop['%'].astype(str) + "%)"
-                        dados_para_graficos[nome_camada] = {"tipo": "populacao", "df": resumo_pop, "coluna": col_classe}
 
     col_mapa, col_dados = st.columns([6, 4])
     with col_mapa:
@@ -174,11 +216,21 @@ with aba_mapa:
             def definir_estilo(feature, camada=nome_camada, coluna=col_classe, cor_idx=idx):
                 if coluna and coluna in feature['properties']:
                     valor = str(feature['properties'].get(coluna, '')).strip().upper()
-                    if "Vulnerabilidade" in camada or "IBGE" in camada.upper():
-                        return {'fillColor': cores_vulnerabilidade.get(valor, '#969696'), 'color': '#000000', 'weight': 0.8 if "IBGE" in camada.upper() else 0.5, 'fillOpacity': 0.7}
+                    if "Vulnerabilidade" in camada:
+                        return {'fillColor': cores_vulnerabilidade.get(valor, '#969696'), 'color': '#000000', 'weight': 0.5, 'fillOpacity': 0.7}
                 return {'fillColor': paleta_generica[cor_idx % len(paleta_generica)], 'color': '#333333', 'weight': 0.5, 'fillOpacity': 0.5}
 
             mostrar_tooltip = folium.GeoJsonTooltip(fields=[col_classe], aliases=["Atributo: "]) if col_classe and col_classe in gdf.columns else None
+            
+            # Se for IBGE, mostra a população no tooltip se existir
+            tooltips = [col_classe]
+            aliases = ["Atributo: "]
+            if "Censo 2022" in nome_camada and 'POP_2022' in gdf.columns:
+                tooltips.append('POP_2022')
+                aliases.append("População: ")
+            
+            mostrar_tooltip = folium.GeoJsonTooltip(fields=tooltips, aliases=aliases) if tooltips[0] in gdf.columns else None
+            
             folium.GeoJson(gdf, name=nome_camada, style_function=definir_estilo, highlight_function=lambda x: {'weight': 2, 'color': 'black', 'fillOpacity': 0.9}, tooltip=mostrar_tooltip).add_to(fg)
             fg.add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
@@ -190,7 +242,7 @@ with aba_mapa:
             for nome_camada, info in dados_para_graficos.items():
                 fig = px.bar(info["df"], x='Area_km2' if info["tipo"] == "area" else 'Populacao', y=info["coluna"], orientation='h', title=f"📊 Representatividade: {nome_camada}", color=info["coluna"], color_discrete_map=cores_vulnerabilidade, text='Rotulo_Grafico', custom_data=['%'])
                 fig.update_traces(textposition='outside')
-                fig.update_layout(showlegend=False, xaxis_title="Área (km²)" if info["tipo"] == "area" else "População (Hab.)", yaxis_title="", yaxis={'categoryorder':'total ascending'}, margin=dict(r=150))
+                fig.update_layout(showlegend=False, xaxis_title="Área (km²)" if info["tipo"] == "area" else "População Oficial (IBGE)", yaxis_title="", yaxis={'categoryorder':'total ascending'}, margin=dict(r=150))
                 st.plotly_chart(fig, use_container_width=True)
 
 # ---------------------------------------------------------------------
@@ -198,7 +250,7 @@ with aba_mapa:
 # ---------------------------------------------------------------------
 with aba_cruzamento:
     st.header("📊 Tabela Dinâmica (Spatial Join)")
-    st.markdown("Sobrepõe duas camadas e transfere os atributos (Ideal para cruzar o IBGE com a Vulnerabilidade).")
+    st.markdown("Sobrepõe duas camadas e transfere os atributos (Ideal para cruzar o IBGE Ao Vivo com a Vulnerabilidade).")
     col_a, col_b, col_btn = st.columns([4, 4, 2])
     with col_a: camada_alvo_join = st.selectbox("1. Camada Alvo:", list(mapas_encontrados.keys()), index=0, key='join_alvo')
     with col_b: camada_recorte_join = st.selectbox("2. Camada Base:", list(mapas_encontrados.keys()), index=1, key='join_recorte')
@@ -206,8 +258,8 @@ with aba_cruzamento:
 
     if executar_join:
         with st.spinner("Relacionando tabelas..."):
-            gdf_alvo = carregar_mapa(str(mapas_encontrados[camada_alvo_join])).to_crs(epsg=31984)
-            gdf_recorte = carregar_mapa(str(mapas_encontrados[camada_recorte_join])).to_crs(epsg=31984)
+            gdf_alvo = obter_gdf(camada_alvo_join).to_crs(epsg=31984)
+            gdf_recorte = obter_gdf(camada_recorte_join).to_crs(epsg=31984)
             st.session_state["df_cruzamento"] = gpd.sjoin(gdf_alvo, gdf_recorte, how="inner", predicate="intersects").drop(columns=['geometry'])
             st.success("✅ Relacionamento concluído!")
 
@@ -230,110 +282,75 @@ with aba_cruzamento:
         with g2: st.plotly_chart(px.pie(df_pivot, values=coluna_y, names=agrupar_por, hole=0.4), use_container_width=True)
 
 # ---------------------------------------------------------------------
-# ABA 3: MICRO-ANÁLISE E RECORTES ESPACIAIS (O NOVO "CLIP") COM MEMÓRIA BLINDADA
+# ABA 3: MICRO-ANÁLISE E RECORTES ESPACIAIS
 # ---------------------------------------------------------------------
 with aba_microanalise:
     st.header("✂️ Micro-Análise (Recorte Geométrico)")
-    st.markdown("""
-    Esta ferramenta recorta os polígonos de estudo usando os limites exatos de um atributo específico. 
-    A área física será **recalculada na hora** baseada apenas nas fatias geométricas que sobrarem dentro do recorte.
-    """)
-
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("1. O que você quer analisar?")
-        camada_estudo = st.selectbox("Camada de Estudo (Ex: Vegetação, Vulnerabilidade):", list(mapas_encontrados.keys()), index=0)
+        camada_estudo = st.selectbox("Camada de Estudo:", list(mapas_encontrados.keys()), index=0)
     
     with col2:
         st.subheader("2. Qual será a Faca de Recorte?")
-        camada_mascara = st.selectbox("Camada Máscara (Ex: Municípios):", list(mapas_encontrados.keys()), index=1)
+        camada_mascara = st.selectbox("Camada Máscara:", list(mapas_encontrados.keys()), index=1)
         
-        gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
+        gdf_mask_bruto = obter_gdf(camada_mascara)
         col_filtro = obter_coluna_real(gdf_mask_bruto, camada_mascara)
         
         if col_filtro:
             valores_disponiveis = sorted(gdf_mask_bruto[col_filtro].astype(str).unique())
             valor_recorte = st.selectbox(f"Selecione o(a) {col_filtro} para o recorte:", valores_disponiveis)
         else:
-            st.error("Não foi possível identificar uma coluna válida para filtragem nesta camada.")
+            st.error("Não foi possível identificar uma coluna válida para filtragem.")
 
     st.markdown("---")
-    executar_clip = st.button("✂️ Executar Recorte Geométrico e Recalcular Área", type="primary", use_container_width=True)
+    executar_clip = st.button("✂️ Executar Recorte Geométrico", type="primary", use_container_width=True)
 
     if executar_clip and col_filtro:
-        with st.spinner(f"Fatiando polígonos e recalculando a área dentro de {valor_recorte}..."):
+        with st.spinner(f"Fatiando polígonos..."):
             try:
-                gdf_alvo = carregar_mapa(str(mapas_encontrados[camada_estudo])).to_crs(epsg=31984)
-                gdf_mask = carregar_mapa(str(mapas_encontrados[camada_mascara])).to_crs(epsg=31984)
+                gdf_alvo = obter_gdf(camada_estudo).to_crs(epsg=31984)
+                gdf_mask = obter_gdf(camada_mascara).to_crs(epsg=31984)
                 
-                # 1. Isola a coluna certa do mapa alvo e remove as demais (evita erro de coluna duplicada)
                 col_alvo_real = obter_coluna_real(gdf_alvo, camada_estudo)
-                if col_alvo_real:
-                    gdf_alvo = gdf_alvo[[col_alvo_real, 'geometry']]
+                if col_alvo_real: gdf_alvo = gdf_alvo[[col_alvo_real, 'geometry']]
                 
-                # 2. Filtra a máscara para ter apenas o polígono escolhido (Ex: Só Mossoró)
-                mascara_filtrada = gdf_mask[gdf_mask[col_filtro].astype(str) == valor_recorte]
-                mascara_filtrada = mascara_filtrada[['geometry']] # Mantém só a geometria da faca
-                
-                # 3. O Recorte Espacial (Intersection)
+                mascara_filtrada = gdf_mask[gdf_mask[col_filtro].astype(str) == valor_recorte][['geometry']]
                 gdf_recortado = gpd.overlay(gdf_alvo, mascara_filtrada, how="intersection")
                 
                 if gdf_recortado.empty:
-                    st.warning(f"As camadas não se cruzam fisicamente ou não há dados de {camada_estudo} dentro de {valor_recorte}.")
+                    st.warning(f"Sem intersecção física dentro de {valor_recorte}.")
                     st.session_state["gdf_microanalise"] = None
                 else:
                     gdf_recortado['Nova_Area_km2'] = gdf_recortado.geometry.area / 10**6
                     st.session_state["gdf_microanalise"] = gdf_recortado
-                    st.session_state["info_microanalise"] = {
-                        "valor_recorte": valor_recorte, 
-                        "col_alvo": col_alvo_real
-                    }
+                    st.session_state["info_microanalise"] = {"valor_recorte": valor_recorte, "col_alvo": col_alvo_real}
             except Exception as e:
-                st.error(f"Erro ao processar o recorte geométrico. Detalhes: {e}")
+                st.error(f"Erro ao processar: {e}")
 
-    # Fora do botão, o código desenha a tela usando a Memória
     if st.session_state["gdf_microanalise"] is not None:
         gdf_recortado = st.session_state["gdf_microanalise"]
         info_sessao = st.session_state["info_microanalise"]
         valor_recorte = info_sessao["valor_recorte"]
         col_alvo = info_sessao["col_alvo"]
 
-        st.success(f"✅ Micro-análise em **{valor_recorte}** processada e ativa na sessão!")
-        
+        st.success(f"✅ Recorte em **{valor_recorte}** ativo!")
         col_result_mapa, col_result_grafico = st.columns([6, 4])
         
         with col_result_grafico:
             resumo_clip = gdf_recortado.groupby(col_alvo)['Nova_Area_km2'].sum().reset_index()
             resumo_clip['%'] = (resumo_clip['Nova_Area_km2'] / resumo_clip['Nova_Area_km2'].sum()) * 100
             resumo_clip['Nova_Area_km2'] = resumo_clip['Nova_Area_km2'].round(2)
-            resumo_clip['%'] = resumo_clip['%'].round(2)
-            
-            fig_clip = px.pie(
-                resumo_clip, values='Nova_Area_km2', names=col_alvo, 
-                title=f"Distribuição em {valor_recorte}",
-                color=col_alvo, color_discrete_map=cores_vulnerabilidade, hole=0.3
-            )
+            fig_clip = px.pie(resumo_clip, values='Nova_Area_km2', names=col_alvo, title=f"Distribuição", color=col_alvo, color_discrete_map=cores_vulnerabilidade, hole=0.3)
             fig_clip.update_traces(textposition='inside', textinfo='percent+label')
             st.plotly_chart(fig_clip, use_container_width=True)
-            
-            st.dataframe(resumo_clip.rename(columns={col_alvo: 'Classe', 'Nova_Area_km2': 'Área Física Real (km²)'}), hide_index=True)
 
         with col_result_mapa:
             gdf_recortado_wgs = gdf_recortado.to_crs(epsg=4326)
-            centro_y = gdf_recortado_wgs.geometry.centroid.y.mean()
-            centro_x = gdf_recortado_wgs.geometry.centroid.x.mean()
-            
-            m_clip = folium.Map(location=[centro_y, centro_x], zoom_start=10, tiles="CartoDB positron")
-            
+            m_clip = folium.Map(location=[gdf_recortado_wgs.geometry.centroid.y.mean(), gdf_recortado_wgs.geometry.centroid.x.mean()], zoom_start=10, tiles="CartoDB positron")
             def estilo_clip(feature):
                 valor = str(feature['properties'].get(col_alvo, '')).strip().upper()
-                cor = cores_vulnerabilidade.get(valor, paleta_generica[0])
-                return {'fillColor': cor, 'color': 'black', 'weight': 1, 'fillOpacity': 0.8}
-            
-            folium.GeoJson(
-                gdf_recortado_wgs,
-                style_function=estilo_clip,
-                tooltip=folium.GeoJsonTooltip(fields=[col_alvo], aliases=["Classe: "]) if col_alvo in gdf_recortado_wgs.columns else None
-            ).add_to(m_clip)
-            
+                return {'fillColor': cores_vulnerabilidade.get(valor, paleta_generica[0]), 'color': 'black', 'weight': 1, 'fillOpacity': 0.8}
+            folium.GeoJson(gdf_recortado_wgs, style_function=estilo_clip, tooltip=folium.GeoJsonTooltip(fields=[col_alvo]) if col_alvo in gdf_recortado_wgs.columns else None).add_to(m_clip)
             st_folium(m_clip, use_container_width=True, height=500, key="mapa_clip", return_on_hover=False)
