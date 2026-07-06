@@ -150,7 +150,13 @@ if modo_analise == "1. Visão Geral (StoryMap)":
         
         if estilo["tipo_cor"] == "Por Atributo":
             coluna_cor = estilo["coluna"]
-            paleta = gerar_paleta(gdf[coluna_cor], nome_camada)
+         # ... (após o 'if estilo["tipo_cor"] == "Por Atributo":')
+
+        if estilo["tipo_cor"] == "Por Atributo":
+            coluna_cor = estilo["coluna"]
+            # CORREÇÃO: Forçamos a coluna para string antes de gerar a paleta
+            valores_para_paleta = gdf[coluna_cor].astype(str).fillna("SEM DADO")
+            paleta = gerar_paleta(valores_para_paleta, nome_camada)
         else:
             coluna_cor = None
             paleta = None
