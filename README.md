@@ -12,18 +12,44 @@ O objetivo desta aplicação é ir além dos mapas estáticos em PDF, permitindo
 
 🔗 **[Acesse o Dashboard Interativo Aqui] (Insira_o_link_do_streamlit_aqui_depois_do_deploy)**
 
-## 🎯 Principais Funcionalidades (O que o Dashboard faz)
-- **Inventário Biofísico Interativo:** Navegação dinâmica por camadas de Geologia, Geomorfologia, Pedologia, Vegetação e Uso e Cobertura da Terra (dados do MapBiomas 2021).
-- **Análise de Vulnerabilidade:** Espacialização da Ecodinâmica de Tricart, permitindo a comparação visual e estatística entre a **Vulnerabilidade Natural** (equilíbrio morfogênese/pedogênese) e a **Vulnerabilidade Ambiental** (peso das ações antrópicas).
-- **Recortes por Sistemas Ambientais:** Filtros integrados para isolar e analisar compartimentos específicos, como os Tabuleiros da Chapada do Apodi ou a Depressão Sertaneja Setentrional.
-- **Gráficos Integrados:** Geração automática de gráficos quantitativos (Plotly) que respondem à interação com o mapa (Leaflet/Folium).
+## 🎯 Principais Funcionalidades (O que o Dashboard faz) 
 
-## 🛠️ Tecnologias e Bibliotecas Utilizadas
-A arquitetura do projeto foi construída utilizando o ecossistema open-source de Python para análise e visualização de dados espaciais:
-* **Streamlit:** Construção da interface web e roteamento interativo.
-* **GeoPandas & Pandas:** Manipulação das tabelas de atributos e processamento das geometrias.
-* **Folium & Streamlit-Folium:** Renderização dos mapas interativos baseados em Leaflet.
-* **Plotly Express:** Geração de gráficos analíticos e painéis de indicadores.
+O dashboard está estruturado em duas vertentes operacionais complementares na mesma interface:
+
+1. **Visão Geral (StoryMap Interativo):**
+   * **Múltiplas Camadas (Overlay):** Permite empilhar e cruzar visualmente diferentes planos de informação (Geologia, Geomorfologia, Pedologia, Vegetação, Drenagem ANA, Municípios e Setores Censitários).
+   * **Controle Granular Estético:** Ajuste individual de transparência por camada e alternância entre renderização por **Cor Única** ou **Por Atributo** (sincronizando os dados do arquivo diretamente com o mapa).
+   * **Basemaps Avançados:** Opções de alternância em tempo real entre mapas bases focados em topografia (curvas de nível) e imagens de satélite de alta resolução (Google Hybrid).
+   * **Pop-ups e Ícones Enxutos:** Consulta de atributos nativos de pontos, linhas e polígonos diretamente na tela através de pop-ups flutuantes otimizados.
+
+2. **Laboratório de Geoprocessamento (Clip & Join Dinâmico):**
+   * **Intersecção Espacial Centralizada (Overlay Intersection):** Executa fatiamentos geométricos de qualquer camada alvo usando um polígono de interesse como máscara de recorte (faca).
+   * **Recálculo de Geometria ao Vivo:** Calcula automaticamente as novas áreas físicas (em km²) ou extensões de linhas (em km) que restaram estritamente dentro do perímetro recortado.
+   * **Tabela Dinâmica e Sincronização Visual:** Gera automaticamente gráficos de rosca, pizza ou barras verticais/horizontais compartilhando exatamente a mesma paleta de cores do mapa, com a opção de filtragem rápida de classes pelo usuário.
+
+O pipeline de desenvolvimento do projeto utiliza ferramentas de vanguarda no ecossistema de Data Science e Geoprocessamento open-source:
+
+* **[Streamlit](https://streamlit.io/):** Framework para estruturação da aplicação web e reatividade da interface.
+* **[GeoPandas](https://geopandas.org/):** Motor de geoprocessamento responsável pelas projeções cartográficas e operações topológicas (`spatial joins` e `overlays`).
+* **[Folium](https://python-visualization.github.io/folium/) & [Streamlit-Folium](https://github.com/randyzwitch/streamlit-folium):** Renderização cartográfica interativa baseada na biblioteca JavaScript Leaflet.
+* **[Plotly Express](https://plotly.com/python/):** Criação dos gráficos dinâmicos com suporte a tooltips e renderização vetorial.
+* **[Pandas](https://pandas.pydata.org/):** Manipulação, agrupamento e filtragem das tabelas de atributos estruturadas.
+
+## 📁 Estrutura do Repositório
+
+Para o correto funcionamento do "radar automático de dados", o repositório deve seguir a organização estrutural abaixo:
+
+```text
+├── data/
+│   ├── dados_ppgeo_bh_bacia_delimitacao.geojson
+│   ├── dados_ppgeo_bh_vulnerabilidade_ambiental.geojson
+│   ├── dados_ppgeo_bh_municipios.geojson
+│   └── [outros arquivos .geojson do inventário...]
+├── VSCODE/
+│   └── app.py
+├── requirements.txt
+└── README.md
+
 
 ## 🚀 Como executar o projeto localmente
 
