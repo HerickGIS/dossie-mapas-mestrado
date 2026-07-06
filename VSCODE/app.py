@@ -48,7 +48,7 @@ def obter_coluna_real(gdf):
     """Encontra a coluna principal de qualquer shapefile/geojson automaticamente."""
     colunas_prioritarias = ["CLASSE", "NOME_UNIDA", "NM_UNIDADE", "LEG_SINOT", "NM_MUN", "NOORIGINAL", "NOME_BACIA"]
     # 1. Tenta achar uma coluna prioritária exata
-    for col_pri em colunas_prioritarias:
+    for col_pri in colunas_prioritarias:
         for col in gdf.columns:
             if col.upper() == col_pri:
                 return col
