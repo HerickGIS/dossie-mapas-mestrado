@@ -69,7 +69,7 @@ colunas_principais = {
     "Municipios": "NM_MUN",
     "Drenagem ANA": "nooriginal",
     "Bacia Delimitacao": "nome_bacia",
-    "Censo 2022 (Ao Vivo)": "NM_MUN" # A coluna de referência da camada viva
+    "Setores Censitarios 2022: "NM_MUN",
 }
 
 # 5. DICIONÁRIOS DE CORES
@@ -99,54 +99,6 @@ def obter_coluna_real(gdf, nome_camada):
     if col_fallback: return col_fallback
     colunas_validas = [col for col in gdf.columns if col != 'geometry']
     return colunas_validas[0] if colunas_validas else None
-
-# =====================================================================
-# GERENCIAMENTO DE DADOS CENSITÁRIOS (IBGE)
-# =====================================================================
-
-def carregar_ibge_local():
-    caminho_csv = Path("data/dados_ibge_populacao.csv")
-    
-    # 1. Verifica se o arquivo existe para evitar o erro [Errno 2]
-    if not caminho_csv.exists():
-        st.sidebar.error(f"Arquivo não encontrado: {caminho_csv}. Verifique se ele está na pasta /data.")
-        return
-
-    try:
-        # 2. Leitura e tratamento do CSV
-        df_ibge = pd.read_csv(caminho_csv)
-        # Limpeza básica: garante que o nome do município bata com o seu shapefile
-        df_ibge['NM_MUN_CLEAN'] = df_ibge['Município'].astype(str).str.split(' - ').str[0].str.upper().str.strip()
-        df_ibge['POP_2022'] = pd.to_numeric(df_ibge['POP_2022'], errors='coerce').fillna(0)
-        
-        # 3. Carrega o GeoJSON dos Municípios que já está na sua pasta data
-        if "Municipios" not in mapas_encontrados:
-            st.sidebar.error("A camada 'Municipios' não foi encontrada pelo radar automático.")
-            return
-            
-        gdf_mun = carregar_mapa_fisico(str(mapas_encontrados["Municipios"]))
-        col_mun = obter_coluna_real(gdf_mun, "Municipios")
-        
-        # 4. Join Espacial/Tabular
-        gdf_mun['NM_TEMP'] = gdf_mun[col_mun].astype(str).str.upper().str.strip()
-        gdf_ibge_fixo = gdf_mun.merge(
-            df_ibge[['NM_MUN_CLEAN', 'POP_2022']], 
-            left_on='NM_TEMP', 
-            right_on='NM_MUN_CLEAN', 
-            how='left'
-        )
-        
-        # 5. Salva na sessão
-        st.session_state["camada_ibge_live"] = gdf_ibge_fixo
-        st.sidebar.success("✅ Censo 2022 carregado e cruzado!")
-        
-    except Exception as e:
-        st.sidebar.error(f"Erro ao processar dados censitários: {e}")
-
-# Interface no Sidebar
-st.sidebar.header("🌐 Dados Censitários")
-if st.sidebar.button("📂 Carregar Censo 2022 (Arquivo Local)"):
-    carregar_ibge_local()
 
 # =====================================================================
 # 6. CRIAÇÃO DE 3 ABAS
