@@ -10,7 +10,7 @@ Este repositório contém um Dashboard interativo desenvolvido para materializar
 
 O objetivo desta aplicação é ir além dos mapas estáticos em PDF, permitindo que pesquisadores, gestores públicos e o público em geral interajam com os dados geoespaciais, explorem as unidades de paisagem e compreendam as dinâmicas de uso e ocupação da terra na região.
 
-🔗 **[Acesse o Dashboard Interativo Aqui] (Insira_o_link_do_streamlit_aqui_depois_do_deploy)**
+🔗 **[Acesse o Dashboard Interativo Aqui] ([Insira_o_link_do_streamlit_aqui_depois_do_deploy](https://dossie-mapas-mestrado-dqusahnjwhsbfgxoqddx3u.streamlit.app/))**
 
 ## 🎯 Principais Funcionalidades (O que o Dashboard faz) 
 
