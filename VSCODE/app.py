@@ -346,7 +346,11 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("🎓 Sobre a Pesquisa")
 st.sidebar.info("""
 **Autor:** Herick Daniel C. dos Santos  
-*Mestre em Geografia (UERN)* *Geógrafo & Analista GIS*
+*Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*
 
-Pesquisa de Mestrado focada na Ecodinâmica de Tricart (1977) e metodologia de Grigio na Bacia do Rio do Carmo (RN).
+Pesquisa focada na **Insegurança Hídrica Domiciliar** e Ecodinâmica na Bacia do Rio do Carmo (RN).
+
+---
+💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/seu-usuario-aqui/)  
+📚 [Dissertação de Mestrado (UERN)](https://url-do-repositorio-da-uern.com/sua-pesquisa)
 """)
