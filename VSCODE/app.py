@@ -16,7 +16,7 @@ if "gdf_processado" not in st.session_state:
 if "coluna_analise" not in st.session_state:
     st.session_state["coluna_analise"] = None
 
-st.title("💧 Sistema de Inteligência Geográfica: Bacia do Rio do Carmo")
+st.title("💧 WebGIS com Sistema de Inteligência Geográfica: Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo-RN")
 st.markdown("**Análise Espacial, Ecodinâmica e Geoprocessamento Dinâmico**")
 
 # =====================================================================
@@ -87,10 +87,10 @@ if modo_analise == "1. Visão Geral (StoryMap)":
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             st.markdown("**Vulnerabilidade Natural (VN):**")
-            st.latex(r"VN = \frac{\text{Geomorfo} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso e Cobertura}}{5}")
+            st.latex(r"VN = \frac{\text{Geomorfologia} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso e Cobertura do Solo}}{5}")
         with col_m2:
             st.markdown("**Vulnerabilidade Ambiental (VA):**")
-            st.latex(r"VA = 0.2[\text{Geomorfo}] + 0.1[\text{Geologia}] + 0.1[\text{Pedologia}] + 0.1[\text{Vegetação}] + 0.5[\text{Uso e Cobertura}]")
+            st.latex(r"VA = 0.2[\text{Geomorfologia}] + 0.1[\text{Geologia}] + 0.1[\text{Pedologia}] + 0.1[\text{Vegetação}] + 0.5[\text{Uso e Cobertura do Solo}]")
 
     st.markdown("---")
     
@@ -348,9 +348,9 @@ st.sidebar.info("""
 **Autor:** Herick Daniel C. dos Santos  
 *Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*
 
-Pesquisa focada na **Insegurança Hídrica Domiciliar** e Ecodinâmica na Bacia do Rio do Carmo (RN).
+Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica.
 
 ---
-💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/seu-usuario-aqui/)  
-📚 [Dissertação de Mestrado (UERN)](https://url-do-repositorio-da-uern.com/sua-pesquisa)
+💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8//)  
+📚 [Dissertação de Mestrado (UERN)](https://sucupira-legado.capes.gov.br/sucupira/public/consultas/coleta/trabalhoConclusao/viewTrabalhoConclusao.jsf?popup=true&id_trabalho=15178165)
 """)
