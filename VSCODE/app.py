@@ -20,11 +20,12 @@ st.title("💧 WebGIS com Sistema de Inteligência Geográfica: Análise dos Sis
 st.markdown("**Análise Espacial, Ecodinâmica e Geoprocessamento Dinâmico**")
 
 # =====================================================================
-# 2. RADAR DE ARQUIVOS (Busca todos os .geojson na pasta)
+# 2. RADAR DE ARQUIVOS (Busca todos os .geojson e imagens na pasta)
 # =====================================================================
 BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent if BASE_DIR.name == "VSCODE" else BASE_DIR
 
+# Radar de GeoJSON
 todos_arquivos = [f for f in REPO_DIR.rglob("*") if f.suffix.lower() == '.geojson']
 
 if not todos_arquivos:
@@ -36,6 +37,11 @@ for arquivo in sorted(todos_arquivos):
     nome_legivel = arquivo.stem.replace("dados_ppgeo_bh_", "").replace("dados_", "").replace("_", " ").title()
     nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas").replace("Ibge", "IBGE")
     mapas_encontrados[nome_legivel] = arquivo
+
+# Radar de Imagens para o Atlas Cartográfico
+extensoes_img = ['.png', '.jpg', '.jpeg']
+todas_imagens = [f for f in REPO_DIR.rglob("*") if f.suffix.lower() in extensoes_img]
+mapas_estaticos = {f.stem.replace("_", " ").title(): f for f in sorted(todas_imagens)}
 
 @st.cache_data(show_spinner=False)
 def carregar_mapa(caminho): 
@@ -74,7 +80,10 @@ def obter_coluna_real(gdf):
 # 4. PAINEL LATERAL (CONTROLE GERAL)
 # =====================================================================
 st.sidebar.header("⚙️ Configurações da Análise")
-modo_analise = st.sidebar.radio("Escolha o Modo de Navegação:", ["1. Visão Geral (StoryMap)", "2. Laboratório de Geoprocessamento"])
+modo_analise = st.sidebar.radio(
+    "Escolha o Modo de Navegação:", 
+    ["1. Visão Geral (StoryMap)", "2. Laboratório de Geoprocessamento", "3. Atlas Cartográfico (Imagens)"]
+)
 st.sidebar.markdown("---")
 
 # =====================================================================
@@ -340,12 +349,45 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             st.dataframe(df_final[cols_ordem].rename(columns={'Geometria_Calc': und}), hide_index=True, use_container_width=True)
 
 # =====================================================================
+# MODO 3: ATLAS CARTOGRÁFICO (Visualização de Imagens)
+# =====================================================================
+elif modo_analise == "3. Atlas Cartográfico (Imagens)":
+    st.header("🗺️ Atlas Cartográfico (Mapas de Layout)")
+    st.markdown("Visualize ou faça o download dos mapas estáticos em alta resolução produzidos para a pesquisa.")
+    st.markdown("---")
+
+    if not mapas_estaticos:
+        st.info("💡 Nenhuma imagem (PNG, JPG, JPEG) foi encontrada. Adicione seus mapas finalizados na pasta do repositório para que apareçam aqui automaticamente.")
+    else:
+        col_selecao, col_download = st.columns([3, 1])
+        
+        with col_selecao:
+            mapa_escolhido = st.selectbox("Selecione o mapa cartográfico para visualizar:", list(mapas_estaticos.keys()))
+            caminho_imagem = mapas_estaticos[mapa_escolhido]
+            
+        with col_download:
+            st.write("") 
+            st.write("")
+            with open(caminho_imagem, "rb") as file:
+                tipo_mime = "image/png" if caminho_imagem.suffix.lower() == '.png' else "image/jpeg"
+                st.download_button(
+                    label="📥 Baixar Imagem em Alta",
+                    data=file,
+                    file_name=caminho_imagem.name,
+                    mime=tipo_mime,
+                    type="primary",
+                    use_container_width=True
+                )
+
+        st.image(str(caminho_imagem), caption=f"Fonte: Dissertação - {mapa_escolhido}", use_container_width=True)
+
+# =====================================================================
 # RODAPÉ LATERAL: AUTOR E PESQUISA
 # =====================================================================
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎓 Sobre a Pesquisa")
 st.sidebar.info("""
-**Autor:** Herick Daniel C. dos Santos  
+**Autor:** Herick Santos  
 *Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*
 
 Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica.
