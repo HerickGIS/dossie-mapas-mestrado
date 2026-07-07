@@ -34,12 +34,10 @@ st.markdown("**Análise Espacial, Ecodinâmica e Geoprocessamento Dinâmico**")
 BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent if BASE_DIR.name == "VSCODE" else BASE_DIR
 
-# Aponta direto para a pasta 'data' para evitar ler os arquivos do servidor
 DATA_DIR = REPO_DIR / "data"
 if not DATA_DIR.exists():
-    DATA_DIR = REPO_DIR # Fallback se a pasta data não existir
+    DATA_DIR = REPO_DIR 
 
-# Radar de GeoJSON (Busca ultrarrápida filtrada)
 todos_arquivos = list(DATA_DIR.rglob("*.geojson"))
 
 if not todos_arquivos:
@@ -52,7 +50,6 @@ for arquivo in sorted(todos_arquivos):
     nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas").replace("Ibge", "IBGE")
     mapas_encontrados[nome_legivel] = arquivo
 
-# Radar de Imagens para o Atlas Cartográfico (Ignora pastas do sistema)
 todas_imagens = []
 for ext in ['*.png', '*.jpg', '*.jpeg', '*.PNG', '*.JPG', '*.JPEG']:
     todas_imagens.extend(DATA_DIR.rglob(ext))
@@ -218,7 +215,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
                 st.dataframe(tabelas_brutas[nome], use_container_width=True, hide_index=True)
 
 # =====================================================================
-# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Recorte, Join Inclusivo e BI)
+# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Recorte Rápido e BI)
 # =====================================================================
 elif modo_analise == "2. Laboratório de Geoprocessamento":
     st.sidebar.subheader("🎯 1. Camada de Estudo")
@@ -240,18 +237,19 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
     valor_faca = st.sidebar.selectbox(f"Selecione o limite exato de {col_mask_selecionada}:", valores_recorte)
 
     if st.sidebar.button("✂️ Executar Geoprocessamento Avançado", type="primary"):
-        with st.spinner("Realizando Intersecção Espacial e Integração Tabular Total..."):
+        with st.spinner("Realizando Intersecção Espacial de Alta Performance..."):
             try:
                 gdf_a = gdf_alvo_bruto.to_crs(epsg=31984)
                 gdf_m = gdf_mask_bruto.to_crs(epsg=31984)
                 
+                # Isola a máscara e executa a INTERSECÇÃO real (Rápido e limpo)
                 mascara_filtrada = gdf_m[gdf_m[col_mask_selecionada].astype(str) == str(valor_faca)][['geometry', col_mask_selecionada]]
                 
-                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how="union")
-                gdf_cortado[col_mask_selecionada] = gdf_cortado[col_mask_selecionada].fillna("FORA DA ÁREA DE RECORTE")
+                # Restabelecido para intersection: Corta exatamente o que interessa e mantém a tabela
+                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how="intersection")
                 
                 if gdf_cortado.empty:
-                    st.sidebar.error("Sem correspondência física ou geométrica.")
+                    st.sidebar.error("Sem correspondência física ou geométrica na área selecionada.")
                 else:
                     if gdf_cortado.geometry.type.isin(['Polygon', 'MultiPolygon']).any():
                         gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.area / 10**6
@@ -275,6 +273,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         camada_nome = st.session_state["nome_camada_ativa"]
         und = st.session_state["unidade_medida"]
 
+        # Blindagem contra renomeação de colunas pelo GeoPandas (_1, _2)
         if coluna_foco not in gdf_trabalho.columns:
             if f"{coluna_foco}_1" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_1"
             elif f"{coluna_foco}_2" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_2"
@@ -287,7 +286,10 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         if coluna_sec:
             gdf_trabalho[coluna_sec] = gdf_trabalho[coluna_sec].fillna("SEM DADO").astype(str).str.upper().str.strip()
 
-        st.subheader("Painel de Resultados: Intersecção, União e Recálculo Completo")
+        st.subheader("Painel de Resultados: Intersecção e Recálculo Completo")
+        
+        # AQUI TRAVAMOS AS CORES: A paleta é gerada antes de qualquer filtro!
+        paleta_mestra = gerar_paleta(gdf_trabalho[coluna_foco], camada_nome)
         
         controle_col1, controle_col2 = st.columns([1, 1])
         with controle_col1:
@@ -300,11 +302,11 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                 help="Selecione atributos específicos para isolar e recalcular as estatísticas instantaneamente."
             )
         
+        # Aplicação do Filtro após travar as cores
         if filtro_usuario:
             gdf_trabalho = gdf_trabalho[gdf_trabalho[coluna_foco].isin(filtro_usuario)]
         
-        paleta_mestra = gerar_paleta(gdf_trabalho[coluna_foco], camada_nome)
-
+        # Agrupamentos Estatísticos
         if coluna_sec:
             group_cols = [coluna_foco, coluna_sec]
             resumo_df = gdf_trabalho.groupby(group_cols)['Geometria_Calc'].sum().reset_index()
@@ -374,13 +376,16 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                     return {'color': 'black', 'fillColor': cor, 'weight': 1, 'fillOpacity': 0.85, 'radius': 5}
                 return {'fillColor': cor, 'color': '#222222', 'weight': 1, 'fillOpacity': 0.85}
 
+            # Pop-up Dinâmico no Laboratório (Pega as 5 primeiras colunas disponíveis)
+            cols_popup = extrair_colunas_validas(gdf_wgs84)[:5]
+
             fg_lab = folium.FeatureGroup(name=f"Análise Completa: {camada_nome}")
             folium.GeoJson(
                 gdf_wgs84,
                 name="Resultado_Total",
                 style_function=estilo_lab,
                 marker=folium.CircleMarker(radius=5),
-                tooltip=folium.GeoJsonTooltip(fields=[coluna_foco], aliases=[f"{coluna_foco}: "]),
+                popup=folium.GeoJsonPopup(fields=cols_popup, aliases=[f"<b>{c}</b>" for c in cols_popup]) if cols_popup else None,
                 highlight_function=lambda x: {'weight': 3, 'color': 'white'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 6, 'color': 'red'}
             ).add_to(fg_lab)
             
@@ -440,9 +445,9 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         except Exception as e:
             exp_col3.warning("Erro ao empacotar Shapefile.")
 
-        # Tabela completa (Contabilizando TODOS os dados originais e unidos)
+        # Tabela completa de Atributos Originais preservados no Recorte
         with st.expander(f"📋 Tabela de Atributos Combinada Completa (Integridade Total)"):
-            st.caption("Esta tabela apresenta a totalidade dos dados combinados espaciais, preservando linhas sem correspondência direta.")
+            st.caption("Esta tabela apresenta os dados após a intersecção.")
             df_final = gdf_trabalho.drop(columns=['geometry']).copy()
             cols_limpas = [c for c in df_final.columns if not c.endswith('_1') and not c.endswith('_2')]
             df_final = df_final[cols_limpas]
