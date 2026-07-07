@@ -235,7 +235,7 @@ if modo_analise == "1. Visão Geral":
 
     st.subheader("Visualizador Exploratório")
     st.caption("👈 Clique nos elementos do mapa para abrir os atributos enxutos (Pop-up). Altere o mapa base e controle o estilo no menu lateral.")
-    st.components.v1.html(m_geral._repr_html_(), height=550, scrolling=False)
+    st_folium(m_geral, use_container_width=True, height=650, key="mapa_visao_geral", returned_objects=[])
 
     if tabelas_brutas:
         st.subheader("Tabelas de Dados Originais")
