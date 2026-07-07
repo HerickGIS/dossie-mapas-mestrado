@@ -231,10 +231,24 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         st.session_state["gdf_processado"] = gdf_processado
         st.session_state["coluna_analise"] = col_alvo_sel
 
-    # --- Comparativo de Gráficos ---
+   # --- Comparativo de Gráficos ---
     if st.session_state["gdf_processado"] is not None:
         gdf_res = st.session_state["gdf_processado"]
+        col_escolhida = st.session_state["coluna_analise"]
+
+        # VERIFICAÇÃO DE SEGURANÇA
+        if col_escolhida not in gdf_res.columns:
+            st.warning(f"A coluna '{col_escolhida}' não foi encontrada após o geoprocessamento.")
+            st.write("Colunas disponíveis no arquivo resultante:", gdf_res.columns.tolist())
+            # Tenta sugerir a coluna que parece mais correta
+            sugestao = st.selectbox("Selecione a coluna correta para o gráfico:", gdf_res.columns.tolist())
+            col_escolhida = sugestao
+            st.session_state["coluna_analise"] = sugestao
+
+        # Agora o groupby roda com segurança
+        resumo = gdf_res.groupby(col_escolhida, observed=True)['Area_km2'].sum().reset_index()
         
+        # ... (seu restante do código de gráficos abaixo)
         # Opções de visualização
         tipo_g = st.selectbox("Formato:", ["Rosca", "Barras Verticais", "Linhas", "Radar"])
         
