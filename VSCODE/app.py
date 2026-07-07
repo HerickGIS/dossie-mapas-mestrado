@@ -209,9 +209,62 @@ if modo_analise == "1. Visão Geral (StoryMap)":
                 st.dataframe(tabelas_brutas[nome], use_container_width=True, hide_index=True)
 
 # =====================================================================
-# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Recorte, Join e Recálculo)
+# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Aprimorado)
 # =====================================================================
-https://www.linkedin.com/in/herick-santos-msc-3900a61b8/
+elif modo_analise == "2. Laboratório de Geoprocessamento":
+    st.sidebar.subheader("🎯 1. Camada de Estudo")
+    camada_alvo = st.sidebar.selectbox("O que será analisado?", list(mapas_encontrados.keys()))
+    col_alvo_sel = st.sidebar.selectbox("Atributo para gráfico:", extrair_colunas_validas(carregar_mapa(str(mapas_encontrados[camada_alvo]))))
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("✂️ 2. Recorte e Comparação")
+    camada_mascara = st.sidebar.selectbox("Faca (Recorte):", list(mapas_encontrados.keys()))
+    
+    if st.sidebar.button("⚙️ Processar Análise"):
+        # Lógica de Overlay Union para não perder dados que não deram join
+        gdf_a = carregar_mapa(str(mapas_encontrados[camada_alvo])).to_crs(epsg=31984)
+        gdf_m = carregar_mapa(str(mapas_encontrados[camada_mascara])).to_crs(epsg=31984)
+        
+        # Overlay Union mantém os atributos originais que não intersectaram
+        gdf_processado = gpd.overlay(gdf_a, gdf_m, how="union") 
+        gdf_processado['Area_km2'] = gdf_processado.geometry.area / 10**6
+        st.session_state["gdf_processado"] = gdf_processado
+        st.session_state["coluna_analise"] = col_alvo_sel
+
+    # --- Comparativo de Gráficos ---
+    if st.session_state["gdf_processado"] is not None:
+        gdf_res = st.session_state["gdf_processado"]
+        
+        # Opções de visualização
+        tipo_g = st.selectbox("Formato:", ["Rosca", "Barras Verticais", "Linhas", "Radar"])
+        
+        # Lógica de Exportação
+        st.subheader("📥 Exportar Dados")
+        col_exp1, col_exp2 = st.columns(2)
+        
+        # Export para GeoJSON
+        geojson_data = gdf_res.to_json()
+        col_exp1.download_button("Baixar como GeoJSON", data=geojson_data, file_name="analise.geojson", mime="application/json")
+        
+        # Export para KML (usando driver de arquivo do fiona/gpd)
+        if col_exp2.button("Baixar como KML/Shapefile"):
+            gdf_res.to_file("exportacao.kml", driver="KML")
+            with open("exportacao.kml", "rb") as f:
+                col_exp2.download_button("Clique aqui para baixar o arquivo", f, file_name="analise.kml")
+
+        # Gráficos Dinâmicos
+        resumo = gdf_res.groupby(st.session_state["coluna_analise"])['Area_km2'].sum().reset_index()
+        
+        if tipo_g == "Radar":
+            fig = px.line_polar(resumo, r='Area_km2', theta=st.session_state["coluna_analise"], line_close=True)
+        elif tipo_g == "Linhas":
+            fig = px.line(resumo, x=st.session_state["coluna_analise"], y='Area_km2', markers=True)
+        else:
+            fig = px.bar(resumo, x=st.session_state["coluna_analise"], y='Area_km2')
+            
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.dataframe(gdf_res.drop(columns=['geometry']), use_container_width=True)
 
     # --- RENDERIZAÇÃO DO LABORATÓRIO ---
     if st.session_state["gdf_processado"] is not None:
@@ -362,6 +415,6 @@ st.sidebar.info("""
 Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica.
 
 ---
-💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8//)  
+💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)  
 📚 [Dissertação de Mestrado (UERN)](https://sucupira-legado.capes.gov.br/sucupira/public/consultas/coleta/trabalhoConclusao/viewTrabalhoConclusao.jsf?popup=true&id_trabalho=15178165)
 """)
