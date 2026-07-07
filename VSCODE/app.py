@@ -194,8 +194,8 @@ if modo_analise == "1. Visão Geral (StoryMap)":
             gdf,
             name=f"Camada: {nome_camada}",
             style_function=estilo_geral,
-            marker=folium.CircleMarker(radius=3),
-            highlight_function=lambda x: {'weight': 3, 'color': 'yellow'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 3, 'color': 'red'},
+            marker=folium.CircleMarker(radius=5),
+            highlight_function=lambda x: {'weight': 3, 'color': 'yellow'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 5, 'color': 'red'},
             popup=folium.GeoJsonPopup(fields=colunas_popup, aliases=[f"<b>{c}</b>" for c in colunas_popup]) if colunas_popup else None
         ).add_to(fg)
         
@@ -289,7 +289,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                     elif geom.type == 'MultiPoint': heat_data.extend([[p.y, p.x] for p in geom.geoms])
                 HeatMap(heat_data, radius=18, blur=15, name="Kernel KDE").add_to(m_lab)
 
-       def estilo_lab(feature, p=paleta_mestra, col=coluna_foco):
+        def estilo_lab(feature, p=paleta_mestra, col=coluna_foco):
             geom_type = feature['geometry']['type']
             valor = str(feature['properties'].get(col, '')).strip().upper()
             cor = p.get(valor, '#969696')
@@ -298,8 +298,8 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             elif geom_type in ['Point', 'MultiPoint']:
                 return {'color': 'black', 'fillColor': cor, 'weight': 1, 'fillOpacity': 0.9, 'radius': 6}
             return {'fillColor': cor, 'color': '#222222', 'weight': 1, 'fillOpacity': 0.85}
-        cols_popup = extrair_colunas_validas(gdf_wgs84)[:5]
 
+        cols_popup = extrair_colunas_validas(gdf_wgs84)[:5]
         folium.GeoJson(
             gdf_wgs84,
             name="Resultado_Recortado",
@@ -407,7 +407,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             if "Rosca" in tipo_grafico or "Pizza" in tipo_grafico: fig.update_traces(textposition='inside', textinfo='percent+label')
             st.plotly_chart(fig, use_container_width=True)
 
-        with col_g2:
+       with col_g2:
             st.markdown(f"**Tabela Resumo Analítica**")
             df_visual = resumo_df[group_cols + ['Geometria_Calc', '%']].copy()
             df_visual.columns = group_cols + [und, 'Proporção (%)']
@@ -431,14 +431,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             # --------------------------------
             
             st.dataframe(df_final_exibicao.round(3), hide_index=True, use_container_width=True)
-            
-        # Seção de Downloads e Tabela Completa Totalizador
-        st.markdown("---")
-        st.subheader("📥 Exportação Cartográfica do Recorte")
-        exp_col1, exp_col2, exp_col3 = st.columns(3)
-        
-        geojson_str = gdf_trabalho.to_crs(epsg=4326).to_json()
-        exp_col1.download_button(label="🌍 Exportar GeoJSON", data=geojson_str, file_name=f"recorte_{camada_nome.lower()}.geojson", mime="application/json", use_container_width=True)
         
         try:
             kml_buffer = io.BytesIO()
