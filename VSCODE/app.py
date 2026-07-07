@@ -53,21 +53,22 @@ for ext in ['*.png', '*.jpg', '*.jpeg', '*.PNG', '*.JPG', '*.JPEG']:
 mapas_estaticos = {f.stem.replace("_", " ").title(): f for f in sorted(todas_imagens)}
 
 @st.cache_data(show_spinner=False)
-def carregar_mapa(caminho): 
-    return gpd.read_file(caminho)
-
-@st.cache_data(show_spinner=False)
-def obter_centroide_bacia(caminho_bacia):
+def obter_limites_bacia(caminho_bacia):
+    """Calcula o centroide e a caixa delimitadora (bounds) da bacia para o Zoom to Layer."""
     try:
         gdf = gpd.read_file(caminho_bacia).to_crs(epsg=4326)
-        return [gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()]
+        centro = [gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()]
+        # gdf.total_bounds retorna [minx, miny, maxx, maxy]
+        bounds = gdf.total_bounds 
+        # O Folium exige o formato [[miny, minx], [maxy, maxx]]
+        limites = [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
+        return centro, limites
     except:
-        return [-5.6, -37.6]
+        return [-5.6, -37.6], [[-6.0, -38.0], [-5.0, -37.0]]
 
-# Identifica a Bacia e gera a coordenada central
+# Identifica a Bacia e gera a coordenada central e os limites de enquadramento
 bacia_key = next((k for k in mapas_encontrados.keys() if "bacia" in k.lower() or "limite" in k.lower()), list(mapas_encontrados.keys())[0])
-centroide_mapa = obter_centroide_bacia(str(mapas_encontrados[bacia_key]))
-
+centroide_mapa, limites_bacia = obter_limites_bacia(str(mapas_encontrados[bacia_key]))
 def extrair_colunas_validas(gdf):
     return [col for col in gdf.columns if col.lower() not in ['geometry', 'id', 'fid', 'objectid', 'shape_area', 'shape_length']]
 
@@ -170,7 +171,8 @@ if modo_analise == "1. Visão Geral":
 
             estilos_camadas[nome_camada] = {"opacidade": opacidade, "tipo_cor": tipo_cor, "coluna": col_escolhida, "cor_unica": cor_unica, "simbolo": simbolo_pt}
 
-    m_geral = folium.Map(location=centroide_mapa, zoom_start=9, tiles=None, control_scale=True)
+    # Cria o mapa sem zoom fixo
+    m_geral = folium.Map(location=centroide_mapa, tiles=None, control_scale=True)
     adicionar_elementos_cartograficos(m_geral)
     tabelas_brutas = {}
 
@@ -224,6 +226,42 @@ if modo_analise == "1. Visão Geral":
         fg.add_to(m_geral)
         tabelas_brutas[nome_camada] = gdf.drop(columns=['geometry'])
 
+    # === FORÇA O ENQUADRAMENTO EXATO DA BACIA ===
+    m_geral.fit_bounds(limites_bacia)
+    
+    folium.LayerControl(collapsed=False).add_to(m_geral)
+
+    st.subheader("Visualizador Exploratório")
+    st.caption("👈 Clique nos elementos do mapa para abrir os atributos enxutos (Pop-up). Altere o mapa base e controle o estilo no menu lateral.")
+    
+    # st.components.v1.html garante a rederização do iframe
+    st.components.v1.html(m_geral._repr_html_(), height=550, scrolling=False)
+
+                for coord in coords:
+                    if "Losango" in simbolo: 
+                        folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=0, radius=7, color='#222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade, popup=folium.Popup(html, max_width=300)).add_to(fg)
+                    elif "Quadrado" in simbolo: 
+                        folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=45, radius=7, color='#222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade, popup=folium.Popup(html, max_width=300)).add_to(fg)
+                    elif "Triângulo" in simbolo: 
+                        folium.RegularPolygonMarker(location=coord, number_of_sides=3, rotation=0, radius=8, color='#222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade, popup=folium.Popup(html, max_width=300)).add_to(fg)
+                    else: 
+                        folium.CircleMarker(location=coord, radius=5, color='#222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade, popup=folium.Popup(html, max_width=300)).add_to(fg)
+        else:
+            def estilo_geral(feature, p=paleta, c=coluna_cor, cor_fixa=estilo["cor_unica"], op=opacidade):
+                geom_type = feature['geometry']['type']
+                cor_final = p.get(str(feature['properties'].get(c, '')).strip().upper(), '#808080') if p and c else cor_fixa
+                if geom_type in ['LineString', 'MultiLineString']: return {'color': cor_final, 'weight': 3, 'opacity': op}
+                return {'fillColor': cor_final, 'color': '#222222', 'weight': 1, 'fillOpacity': op}
+
+            folium.GeoJson(
+                gdf, name=f"Camada: {nome_camada}", style_function=estilo_geral,
+                highlight_function=lambda x: {'weight': 3, 'color': 'yellow'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 5, 'color': 'red'},
+                popup=folium.GeoJsonPopup(fields=colunas_popup, aliases=[f"<b>{c}</b>" for c in colunas_popup]) if colunas_popup else None
+            ).add_to(fg)
+
+        fg.add_to(m_geral)
+        tabelas_brutas[nome_camada] = gdf.drop(columns=['geometry'])
+
     folium.LayerControl(collapsed=False).add_to(m_geral)
 
     st.subheader("Visualizador Exploratório")
@@ -231,7 +269,7 @@ if modo_analise == "1. Visão Geral":
     st.components.v1.html(m_geral._repr_html_(), height=550, scrolling=False)
 
     if tabelas_brutas:
-        st.subheader("Tabelas de Dados Originais")
+        st.subheader("Tabelas de Atributos")
         abas_tabelas = st.tabs(list(tabelas_brutas.keys()))
         for i, nome in enumerate(tabelas_brutas.keys()):
             with abas_tabelas[i]:
