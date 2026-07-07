@@ -27,17 +27,16 @@ st.title("💧 WebGIS com Sistema de Inteligência Geográfica: Análise dos Sis
 st.markdown("**Análise de Dados Espacial, Ecodinâmica e Geoprocessamento**")
 
 # =====================================================================
-# 2. RADAR DE ARQUIVOS E CACHE
+# 2. RADAR DE ARQUIVOS E CACHE (CORRIGIDO PARA BUSCA GERAL RÁPIDA)
 # =====================================================================
 BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent if BASE_DIR.name == "VSCODE" else BASE_DIR
 
-DATA_DIR = REPO_DIR / "data"
-if not DATA_DIR.exists(): DATA_DIR = REPO_DIR 
+# Busca super-rápida de GeoJSON no repositório inteiro (ignorando o venv do servidor)
+todos_arquivos = [f for f in REPO_DIR.rglob("*.geojson") if 'venv' not in f.parts and '.git' not in f.parts]
 
-todos_arquivos = list(DATA_DIR.rglob("*.geojson"))
 if not todos_arquivos:
-    st.error("⚠️ Nenhum arquivo '.geojson' encontrado na pasta data!")
+    st.error("⚠️ Nenhum arquivo '.geojson' encontrado no repositório!")
     st.stop()
 
 mapas_encontrados = {}
@@ -46,9 +45,11 @@ for arquivo in sorted(todos_arquivos):
     nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas").replace("Ibge", "IBGE")
     mapas_encontrados[nome_legivel] = arquivo
 
+# Busca super-rápida de Imagens no repositório inteiro (O Atlas voltou!)
 todas_imagens = []
 for ext in ['*.png', '*.jpg', '*.jpeg', '*.PNG', '*.JPG', '*.JPEG']:
-    todas_imagens.extend(DATA_DIR.rglob(ext))
+    todas_imagens.extend([f for f in REPO_DIR.rglob(ext) if 'venv' not in f.parts and '.git' not in f.parts])
+
 mapas_estaticos = {f.stem.replace("_", " ").title(): f for f in sorted(todas_imagens)}
 
 @st.cache_data(show_spinner=False)
@@ -56,14 +57,12 @@ def carregar_mapa(caminho): return gpd.read_file(caminho)
 
 @st.cache_data(show_spinner=False)
 def obter_centroide_bacia(caminho_bacia):
-    """Calcula o centroide da bacia para centralizar todos os mapas automaticamente."""
     try:
         gdf = gpd.read_file(caminho_bacia).to_crs(epsg=4326)
         return [gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()]
     except:
-        return [-5.6, -37.6] # Fallback caso haja erro de projeção
+        return [-5.6, -37.6]
 
-# Define o centro do mapa dinamicamente
 bacia_key = next((k for k in mapas_encontrados.keys() if "bacia" in k.lower() or "limite" in k.lower()), list(mapas_encontrados.keys())[0])
 centroide_mapa = obter_centroide_bacia(str(mapas_encontrados[bacia_key]))
 
@@ -79,13 +78,11 @@ cores_vulnerabilidade = {
 }
 
 def gerar_paleta(valores, nome_camada):
-    """Gera cores vibrantes ou respeita a escala de vulnerabilidade."""
     valores_higienizados = valores.astype(str).fillna("SEM DADO")
     valores_unicos = sorted(list(set(valores_higienizados)))
     if "vulnerabilidade" in nome_camada.lower():
         return {str(v): cores_vulnerabilidade.get(str(v).strip().upper(), '#808080') for v in valores_unicos}
     
-    # Paleta extremamente variada e vibrante
     paleta_vibrante = px.colors.qualitative.Alphabet + px.colors.qualitative.Vivid + px.colors.qualitative.Dark24
     return {str(v): paleta_vibrante[i % len(paleta_vibrante)] for i, v in enumerate(valores_unicos)}
 
@@ -100,17 +97,14 @@ def obter_coluna_real(gdf):
     return colunas_validas[0] if colunas_validas else None
 
 def adicionar_elementos_cartograficos(mapa_folium):
-    """Adiciona Basemaps, Norte, Escala e Coordenadas do Mouse."""
     folium.TileLayer('CartoDB positron', name='Claro (Positron)', control=True).add_to(mapa_folium)
     folium.TileLayer('CartoDB dark_matter', name='Escuro (Dark Matter)', control=True).add_to(mapa_folium)
     folium.TileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', attr='Google', name='Satélite Puro (Google)', overlay=False, control=True).add_to(mapa_folium)
     folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido (Google)', overlay=False, control=True).add_to(mapa_folium)
     folium.TileLayer('OpenStreetMap', name='Street Maps (OSM)', control=True).add_to(mapa_folium)
-    # Reintegrada a Topografia de Curvas de Nível
     folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='OpenTopoMap', name='Topografia (Curvas de Nível)', overlay=False, control=True).add_to(mapa_folium)
 
     MousePosition(position='bottomright', separator=' | ', empty_string='Fora do Mapa', num_digits=5, prefix='Coordenada:').add_to(mapa_folium)
-    # Rosa dos Ventos no Canto Superior Esquerdo
     url_norte = 'https://upload.wikimedia.org/wikipedia/commons/9/99/Compass_rose_simple.svg'
     FloatImage(url_norte, bottom=None, top=5, left=5, right=None).add_to(mapa_folium)
 
@@ -120,7 +114,7 @@ def adicionar_elementos_cartograficos(mapa_folium):
 st.sidebar.header("⚙️ Configurações da Análise")
 modo_analise = st.sidebar.radio(
     "Escolha o Modo de Navegação:", 
-    ["1. Visão Geral", "2. Laboratório de Geoprocessamento", "3. Atlas Cartográfico"]
+    ["1. Visão Geral", "2. Laboratório de Geoprocessamento", "3. Atlas Cartográfico (Imagens)"]
 )
 st.sidebar.markdown("---")
 
@@ -202,7 +196,6 @@ if modo_analise == "1. Visão Geral":
                 html = "".join([f"<b>{col_p}:</b> {row.get(col_p, '')}<br>" for col_p in colunas_popup])
                 coords = [[geom.y, geom.x]] if geom.type == 'Point' else [[p.y, p.x] for p in geom.geoms]
 
-                # CORREÇÃO DEFINITIVA DAS FORMAS GEOMÉTRICAS DO LEAFLET
                 for coord in coords:
                     if "Losango" in simbolo: 
                         folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=0, radius=7, color='#222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade, popup=folium.Popup(html, max_width=300)).add_to(fg)
@@ -262,7 +255,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
     col_alvo_secundada = None
     if cruzar_segundo: col_alvo_secundada = st.sidebar.selectbox("Segundo atributo para correlação:", [c for c in extrair_colunas_validas(gdf_alvo_bruto) if c != col_alvo_selecionada])
 
-    # --- FILTRO AVANÇADO SQL ADICIONADO ---
     with st.sidebar.expander("🛠️ Filtro Avançado SQL", expanded=False):
         st.markdown("Construa uma equação condicional para filtrar os dados ANTES do recorte.")
         usar_filtro_sql = st.checkbox("Habilitar Filtro SQL")
@@ -476,7 +468,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
 
     folium.LayerControl(collapsed=True).add_to(m_lab)
 
-    # Monitoramento do desenho em tempo real
     draw_res = st_folium(m_lab, use_container_width=True, height=500, key="mapa_laboratorio_unico", return_on_hover=False)
     if origem_mascara == "🖍️ Desenhar Área Personalizada" and draw_res and draw_res.get("all_drawings"):
         st.session_state['last_draw'] = draw_res["all_drawings"]
@@ -507,22 +498,21 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         with st.expander(f"📋 Tabela de Atributos Combinada Integral"):
             st.dataframe(gdf_trabalho.drop(columns=['geometry']), hide_index=True, use_container_width=True)
 
-# MODO 3: ATLAS CARTOGRÁFICO (Visualização de Imagens)
-
 # =====================================================================
-
+# MODO 3: ATLAS CARTOGRÁFICO (Imagens)
+# =====================================================================
 elif modo_analise == "3. Atlas Cartográfico (Imagens)":
-    st.header("🗺️ Atlas Cartográfico (Mapas de Layout)")
-    st.markdown("Visualize ou faça o download dos mapas estáticos em alta resolução produzidos para a pesquisa.")
+    st.header("🗺️ Atlas Cartográfico")
+    st.markdown("Visualize ou faça o download dos mapas estáticos em alta resolução.")
     st.markdown("---")
 
     if not mapas_estaticos:
-        st.info("💡 Nenhuma imagem (PNG, JPG, JPEG) foi encontrada na pasta data. Adicione seus arquivos para listagem automática.")
+        st.info("💡 Adicione suas imagens na pasta 'data'.")
     else:
         col_selecao, col_download = st.columns([3, 1])
 
         with col_selecao:
-            mapa_escolhido = st.selectbox("Selecione o mapa cartográfico para visualizar:", list(mapas_estaticos.keys()))
+            mapa_escolhido = st.selectbox("Selecione o mapa:", list(mapas_estaticos.keys()))
             caminho_imagem = mapas_estaticos[mapa_escolhido]
 
         with col_download:
@@ -530,16 +520,9 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
             st.write("")
             with open(caminho_imagem, "rb") as file:
                 tipo_mime = "image/png" if caminho_imagem.suffix.lower() == '.png' else "image/jpeg"
-                st.download_button(
-                    label="📥 Baixar Imagem",
-                    data=file,
-                    file_name=caminho_imagem.name,
-                    mime=tipo_mime,
-                    type="primary",
-                    use_container_width=True
-                )
+                st.download_button(label="📥 Baixar Imagem", data=file, file_name=caminho_imagem.name, mime=tipo_mime, type="primary", use_container_width=True)
 
-        st.image(str(caminho_imagem), caption=f"Fonte: Dissertação de Mestrado - {mapa_escolhido}", use_container_width=True)
+        st.image(str(caminho_imagem), caption=f"Fonte: Dissertação - {mapa_escolhido}", use_container_width=True)
 
 # =====================================================================
 # RODAPÉ LATERAL
@@ -550,5 +533,5 @@ st.sidebar.markdown("**Autor:** Herick Santos")
 st.sidebar.markdown("*Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*")
 st.sidebar.markdown("Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando análise de dados com Álgebra de Mapas e princípios da Ecodinâmica.")
 st.sidebar.markdown("---")
-st.sidebar.markdown("💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)")
-st.sidebar.markdown("📚 [Dissertação de Mestrado (UERN)](https://sucupira-legado.capes.gov.br/sucupira/public/consultas/coleta/trabalhoConclusao/viewTrabalhoConclusao.jsf?popup=true&id_trabalho=15178165)")
+st.sidebar.markdown("[Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)")
+st.sidebar.markdown("[Dissertação de Mestrado (UERN)](https://sucupira-legado.capes.gov.br/sucupira/public/consultas/coleta/trabalhoConclusao/viewTrabalhoConclusao.jsf?popup=true&id_trabalho=15178165)")
