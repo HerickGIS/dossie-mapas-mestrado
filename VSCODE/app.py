@@ -126,7 +126,7 @@ st.sidebar.markdown("---")
 if modo_analise == "1. Visão Geral":
 
     with st.expander("📖 Metodologia: Ecodinâmica de Tricart", expanded=False):
-        st.markdown("A modelagem de vulnerabilidade integra a dimensão do meio físico e a pressão antrópica por Álgebra de Mapas.")
+        st.markdown("Através das análises, mediante o banco de dados geográficos, foi possível através do software ArcMap, usufruindo de suas ferramentas e recursos, a elaboração dos Mapas de Localização, Hipsometria e Hidrografia, Declividade, Pluviometria, Geologia, Geomorfologia, Pedologia, Cobertura da Vegetação, Uso e Cobertura da Terra, Vulnerabilidade Natural e Vulnerabilidade Ambiental. A partir de todos os dados, para o objetivo final da pesquisa, utilizou-se a modelagem de vulnerabilidade que integra a dimensão do meio físico e a pressão antrópica por Álgebra de Mapas.")
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             st.markdown("**Vulnerabilidade Natural (VN):**")
