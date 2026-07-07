@@ -1,4 +1,4 @@
-# 🗺️ Dossiê Dinâmico: Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN)
+# 🗺️ Dossiê Dinâmico: Os Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN)
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/Streamlit-App-red.svg)
@@ -6,50 +6,51 @@
 ![Status](https://img.shields.io/badge/Status-Concluído-brightgreen.svg)
 
 ## 📌 Sobre o Projeto
-Este repositório contém um Dashboard interativo desenvolvido para materializar os resultados da dissertação de mestrado focada na análise da **Bacia Hidrográfica do Rio do Carmo (BHRC)**, localizada no semiárido do Rio Grande do Norte.
+Esta aplicação transforma o paradigma dos mapas estáticos em PDF, permitindo que pesquisadores, gestores, empresas que realizam estudos ambientais, bem como a sociedade interajam diretamente com dados geoespaciais. O projeto nasceu da minha experiência no Mestrado, onde, após uma extensa pesquisa, percebi o limite das análises impressas: ao final de 180 páginas, os dados tornavam-se estáticos, impedindo novas explorações ou insights.
 
-O objetivo desta aplicação é ir além dos mapas estáticos em PDF, permitindo que pesquisadores, gestores públicos e o público em geral interajam com os dados geoespaciais, explorem as unidades de paisagem e compreendam as dinâmicas de uso e ocupação da terra na região.
+A partir dessa reflexão, surgiu a proposta de criar uma plataforma viva. Utilizando Python e um ecossistema robusto de bibliotecas para análise de dados, desenvolvi esta ferramenta não apenas para visualizar a Bacia Hidrográfica do Rio do Carmo (BHRC), mas para permitir a continuidade da análise, transformando dados em inteligência geográfica acessível e dinâmica. Como esse repositório é público, você mesmo pode utilizar em sua pesquisa.
 
-🔗 **[Acesse o Dashboard Interativo Aqui] (Link para Projeto no Streamlit(https://dossie-mapas-mestrado-herick-santos.streamlit.app)**
+🔗 **[Acesse o Dashboard Interativo Aqui](https://dossie-mapas-mestrado-herick-santos.streamlit.app)**
 
-## 🎯 Principais Funcionalidades (O que o Dashboard faz) 
+## 🎯 Principais Funcionalidades
 
-O dashboard está estruturado em duas vertentes operacionais complementares na mesma interface:
+O dashboard está estruturado em três vertentes operacionais complementares na mesma interface:
 
-1. **Visão Geral (StoryMap Interativo):**
-   * **Múltiplas Camadas (Overlay):** Permite empilhar e cruzar visualmente diferentes planos de informação (Geologia, Geomorfologia, Pedologia, Vegetação, Drenagem ANA, Municípios e Setores Censitários).
-   * **Controle Granular Estético:** Ajuste individual de transparência por camada e alternância entre renderização por **Cor Única** ou **Por Atributo** (sincronizando os dados do arquivo diretamente com o mapa).
-   * **Basemaps Avançados:** Opções de alternância em tempo real entre mapas bases focados em topografia (curvas de nível) e imagens de satélite de alta resolução (Google Hybrid).
-   * **Pop-ups e Ícones Enxutos:** Consulta de atributos nativos de pontos, linhas e polígonos diretamente na tela através de pop-ups flutuantes otimizados.
+1. **Visão Geral (Interação):**
+   * **Múltiplas Camadas (Overlay):** Permite empilhar e cruzar visualmente diferentes planos de informação (Geologia, Geomorfologia, Pedologia, Vegetação, Drenagem, Municípios e Setores Censitários).
+   * **Controle Granular Estético:** Ajuste individual de transparência por camada e alternância entre renderização por **Cor Única** ou **Por Atributo**.
+   * **Basemaps Avançados:** Opções de alternância em tempo real entre mapas focados em topografia, satélite de alta resolução (Google Hybrid) e modos escuros/claros.
 
 2. **Laboratório de Geoprocessamento (Clip & Join Dinâmico):**
-   * **Intersecção Espacial Centralizada (Overlay Intersection):** Executa fatiamentos geométricos de qualquer camada alvo usando um polígono de interesse como máscara de recorte (faca).
-   * **Recálculo de Geometria ao Vivo:** Calcula automaticamente as novas áreas físicas (em km²) ou extensões de linhas (em km) que restaram estritamente dentro do perímetro recortado.
-   * **Tabela Dinâmica e Sincronização Visual:** Gera automaticamente gráficos de rosca, pizza ou barras verticais/horizontais compartilhando exatamente a mesma paleta de cores do mapa, com a opção de filtragem rápida de classes pelo usuário.
+   * **Intersecção Espacial Centralizada:** Executa fatiamentos geométricos (Clip) de qualquer camada alvo usando um polígono de interesse (ou desenho livre) como máscara de recorte.
+   * **Recálculo de Geometria ao Vivo:** Recalcula automaticamente áreas (km²) ou contagens de pontos dentro do recorte.
+   * **Análise de Kernel (KDE):** Gera mapas de calor dinâmicos para pontos de ocorrência.
+   * **Painel Integrado para análises estatisticas e de dados:** Gráficos interativos (Rosca, Radar, Barras) sincronizados com o recorte, permitindo o cruzamento de variáveis e auditoria dos dados através da linha de "Total Geral".
 
-O pipeline de desenvolvimento do projeto utiliza ferramentas de vanguarda no ecossistema de Data Science e Geoprocessamento open-source:
+3. **Atlas Cartográfico (Mapas de Layout):**
+   * **Repositório de Alta Resolução:** Disponibiliza a coleção de mapas cartográficos temáticos elaborados durante a dissertação.
+   * **Download Direto:** Acesso aos layouts prontos para impressão ou inserção em relatórios oficiais, servindo como referência estática e normatizada que contrasta com a análise exploratória dinâmica.
 
-* **[Streamlit](https://streamlit.io/):** Framework para estruturação da aplicação web e reatividade da interface.
-* **[GeoPandas](https://geopandas.org/):** Motor de geoprocessamento responsável pelas projeções cartográficas e operações topológicas (`spatial joins` e `overlays`).
-* **[Folium](https://python-visualization.github.io/folium/) & [Streamlit-Folium](https://github.com/randyzwitch/streamlit-folium):** Renderização cartográfica interativa baseada na biblioteca JavaScript Leaflet.
-* **[Plotly Express](https://plotly.com/python/):** Criação dos gráficos dinâmicos com suporte a tooltips e renderização vetorial.
-* **[Pandas](https://pandas.pydata.org/):** Manipulação, agrupamento e filtragem das tabelas de atributos estruturadas.
+## 🛠️ Tecnologias Utilizadas
+
+* **[Streamlit](https://streamlit.io/):** Framework para estruturação da aplicação web.
+* **[GeoPandas](https://geopandas.org/):** Motor de geoprocessamento (projeções e álgebra espacial).
+* **[Folium](https://python-visualization.github.io/folium/):** Renderização de mapas interativos Leaflet.
+* **[Plotly Express](https://plotly.com/python/):** Criação de gráficos dinâmicos de alta performance.
+* **[Pandas](https://pandas.pydata.org/):** Manipulação e agregação tabular.
 
 ## 📁 Estrutura do Repositório
 
-Para o correto funcionamento do "radar automático de dados", o repositório deve seguir a organização estrutural abaixo:
+Para o funcionamento do "radar automático de dados", mantenha a organização abaixo:
 
 ```text
 ├── data/
-│   ├── dados_ppgeo_bh_bacia_delimitacao.geojson
-│   ├── dados_ppgeo_bh_vulnerabilidade_ambiental.geojson
-│   ├── dados_ppgeo_bh_municipios.geojson
-│   └── [outros arquivos .geojson do inventário...]
+│   ├── [Arquivos .geojson do projeto]
+│   └── [Imagens/Atlas para o Módulo 3]
 ├── VSCODE/
 │   └── app.py
 ├── requirements.txt
 └── README.md
-
 
 ## 🚀 Como executar o projeto localmente
 
