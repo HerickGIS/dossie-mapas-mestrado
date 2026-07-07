@@ -134,6 +134,12 @@ if modo_analise == "1. Visão Geral (StoryMap)":
             cols_validas = extrair_colunas_validas(gdf_temp)
             col_padrao = obter_coluna_real(gdf_temp)
             
+            # Detecção de Pontos para exibir o menu de símbolos
+            is_pts_camada = gdf_temp.geometry.type.isin(['Point', 'MultiPoint']).any()
+            simbolo_pt = "🟢 Círculo"
+            if is_pts_camada:
+                simbolo_pt = st.selectbox("Símbolo do Ponto:", ["🟢 Círculo", "🔶 Losango", "◼️ Quadrado", "🔺 Triângulo"], key=f"simbolo_{nome_camada}")
+
             if tipo_cor == "Por Atributo":
                 idx = cols_validas.index(col_padrao) if col_padrao in cols_validas else 0
                 col_escolhida = st.selectbox("Atributo para colorir:", cols_validas, index=idx, key=f"col_{nome_camada}")
@@ -143,7 +149,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
                 cor_unica = st.color_picker("Escolha a cor:", "#1f78b4" if "Bacia" in nome_camada else "#e31a1c", key=f"cp_{nome_camada}")
             
             estilos_camadas[nome_camada] = {
-                "opacidade": opacidade, "tipo_cor": tipo_cor, "coluna": col_escolhida, "cor_unica": cor_unica
+                "opacidade": opacidade, "tipo_cor": tipo_cor, "coluna": col_escolhida, "cor_unica": cor_unica, "simbolo": simbolo_pt
             }
     
     m_geral = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles=None)
@@ -160,6 +166,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
         
         estilo = estilos_camadas[nome_camada]
         opacidade = estilo["opacidade"]
+        simbolo = estilo["simbolo"]
         
         if estilo["tipo_cor"] == "Por Atributo":
             coluna_cor = estilo["coluna"]
@@ -176,7 +183,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
         is_points = gdf.geometry.type.isin(['Point', 'MultiPoint']).any()
 
         if is_points:
-            # RENDERIZAÇÃO DE PONTOS COMO LOSANGOS (DIAMONDS)
+            # Lógica de renderização de Símbolos Customizados
             for idx, row in gdf.iterrows():
                 geom = row.geometry
                 if geom is None: continue
@@ -192,11 +199,14 @@ if modo_analise == "1. Visão Geral (StoryMap)":
                 
                 coords = [[geom.y, geom.x]] if geom.type == 'Point' else [[p.y, p.x] for p in geom.geoms]
                 for coord in coords:
-                    folium.RegularPolygonMarker(
-                        location=coord, number_of_sides=4, rotation=45, radius=7, # 4 lados rotacionado = Losango
-                        color='#222222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade,
-                        popup=folium.Popup(html, max_width=300)
-                    ).add_to(fg)
+                    if "Losango" in simbolo:
+                        folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=45, radius=7, color='#222222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade, popup=folium.Popup(html, max_width=300)).add_to(fg)
+                    elif "Quadrado" in simbolo:
+                        folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=0, radius=6, color='#222222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade, popup=folium.Popup(html, max_width=300)).add_to(fg)
+                    elif "Triângulo" in simbolo:
+                        folium.RegularPolygonMarker(location=coord, number_of_sides=3, rotation=0, radius=7, color='#222222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade, popup=folium.Popup(html, max_width=300)).add_to(fg)
+                    else: # Circulo Clássico
+                        folium.CircleMarker(location=coord, radius=5, color='#222222', weight=0.8, fill_color=cor_final, fill_opacity=opacidade, popup=folium.Popup(html, max_width=300)).add_to(fg)
         else:
             def estilo_geral(feature, p=paleta, c=coluna_cor, cor_fixa=estilo["cor_unica"], op=opacidade):
                 geom_type = feature['geometry']['type']
@@ -266,10 +276,9 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
     st.markdown("### 🗺️ Workspace Cartográfico Central")
     st.caption("Acompanhe aqui o desenho de áreas e o resultado dos geoprocessamentos.")
 
-    m_geral = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles=None)
-    folium.TileLayer('CartoDB positron', name='Mapa Base (Claro)', control=True).add_to(m_geral)
-    folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite (Google Hybrid)', overlay=False, control=True).add_to(m_geral)
-    folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='OpenTopoMap', name='Topografia (Curvas de Nível)', overlay=False, control=True).add_to(m_geral)
+    m_lab = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles=None)
+    folium.TileLayer('CartoDB positron', name='Mapa Base (Claro)', control=True).add_to(m_lab)
+    folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite (Google Hybrid)', overlay=False, control=True).add_to(m_lab)
 
     if origem_mascara == "🖍️ Desenhar Área Personalizada":
         Draw(export=False, position='topleft').add_to(m_lab)
@@ -287,7 +296,10 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         fg_lab = folium.FeatureGroup(name=f"Análise: {camada_nome}")
 
         if is_points_layer:
-            habilitar_kde = st.checkbox("🔥 Ativar Densidade de Kernel / Mapa de Calor", value=False)
+            col_kde1, col_kde2 = st.columns(2)
+            with col_kde1: habilitar_kde = st.checkbox("🔥 Ativar Densidade de Kernel / Mapa de Calor", value=False)
+            with col_kde2: simbolo_lab = st.selectbox("📌 Formato do Ponto Cartográfico:", ["🟢 Círculo", "🔶 Losango", "◼️ Quadrado", "🔺 Triângulo"])
+
             if habilitar_kde:
                 heat_data = []
                 for geom in gdf_wgs84.geometry:
@@ -306,12 +318,14 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                 
                 coords = [[geom.y, geom.x]] if geom.type == 'Point' else [[p.y, p.x] for p in geom.geoms]
                 for coord in coords:
-                    folium.RegularPolygonMarker(
-                        location=coord, number_of_sides=4, rotation=45, radius=8, # Losango destacado
-                        color='#111111', weight=1, fill_color=cor, fill_opacity=0.9,
-                        tooltip=f"{coluna_foco}: {valor}",
-                        popup=folium.Popup(html, max_width=300)
-                    ).add_to(fg_lab)
+                    if "Losango" in simbolo_lab:
+                        folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=45, radius=7, color='#111111', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
+                    elif "Quadrado" in simbolo_lab:
+                        folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=0, radius=6, color='#111111', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
+                    elif "Triângulo" in simbolo_lab:
+                        folium.RegularPolygonMarker(location=coord, number_of_sides=3, rotation=0, radius=7, color='#111111', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
+                    else: # Circulo
+                        folium.CircleMarker(location=coord, radius=5, color='#111111', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
         else:
             def estilo_lab(feature):
                 geom_type = feature['geometry']['type']
@@ -387,7 +401,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
 
         st.markdown("### 📊 Painel Estatístico Integrado")
         
-        # Identifica colunas numéricas para Soma Total
         cols_numericas = [c for c in gdf_trabalho.columns if pd.api.types.is_numeric_dtype(gdf_trabalho[c]) and c.lower() not in ['id', 'fid', 'objectid', 'shape_area', 'shape_length', 'geometria_calc']]
         
         col_ctrl1, col_ctrl2, col_ctrl3 = st.columns(3)
@@ -395,12 +408,17 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         with col_ctrl2: filtro_usuario = st.multiselect("🔍 Filtrar Atributos:", options=sorted(list(gdf_trabalho[coluna_foco].unique())))
         with col_ctrl3:
             col_soma = None
+            if cols_numericas:
+                col_soma = st.selectbox("🧮 Somar Coluna Numérica (Opcional):", ["Nenhuma"] + cols_numericas)
 
         if filtro_usuario: gdf_trabalho = gdf_trabalho[gdf_trabalho[coluna_foco].isin(filtro_usuario)]
 
         if gdf_trabalho.geometry.type.isin(['Point', 'MultiPoint']).any():
             gdf_trabalho['Geometria_Calc'] = 1
             und = "Quantidade (Pontos)"
+
+        if col_soma and col_soma != "Nenhuma":
+            st.info(f"📍 **Destaque:** O somatório total do atributo **{col_soma}** na área recortada é **{gdf_trabalho[col_soma].sum():,.2f}**.")
 
         group_cols = [coluna_foco, coluna_sec] if coluna_sec else [coluna_foco]
         resumo_df = gdf_trabalho.groupby(group_cols)['Geometria_Calc'].sum().reset_index()
@@ -429,7 +447,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             df_visual[und] = df_visual[und].round(3)
             df_visual['Proporção (%)'] = df_visual['Proporção (%)'].round(2)
             
-            # Adição automática da linha de TOTAL GERAL
             linha_total = pd.DataFrame([{
                 group_cols[0]: "TOTAL GERAL",
                 und: df_visual[und].sum(),
@@ -442,11 +459,13 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
 
         st.markdown("---")
         st.subheader("📥 Exportação e Tabelas Integrais")
-        exp_col1, exp_col2, exp_col3 = st.columns(3)
+        
+        # Correção limpa do layout de botões de exportação (Apenas GeoJSON e Shapefile)
+        exp_col1, exp_col2 = st.columns(2)
         
         geojson_str = gdf_trabalho.to_crs(epsg=4326).to_json()
         exp_col1.download_button(label="🌍 Exportar GeoJSON", data=geojson_str, file_name=f"recorte.geojson", mime="application/json", use_container_width=True)
-
+        
         try:
             shp_buffer = io.BytesIO()
             with zipfile.ZipFile(shp_buffer, 'w') as zf:
@@ -455,8 +474,9 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                     path_tmp = Path(tmpdir)
                     gdf_trabalho.to_file(path_tmp / "analise_gis.shp")
                     for file_path in path_tmp.iterdir(): zf.write(file_path, arcname=file_path.name)
-            exp_col3.download_button(label="📦 Exportar Shapefile (.ZIP)", data=shp_buffer.getvalue(), file_name=f"recorte.zip", mime="application/zip", use_container_width=True)
-        except: exp_col3.warning("Erro ao zipar Shapefile.")
+            exp_col2.download_button(label="📦 Exportar Shapefile (.ZIP)", data=shp_buffer.getvalue(), file_name=f"recorte.zip", mime="application/zip", use_container_width=True)
+        except: 
+            exp_col2.warning("Erro ao zipar Shapefile.")
 
         with st.expander(f"📋 Tabela de Atributos Combinada Integral"):
             st.dataframe(gdf_trabalho.drop(columns=['geometry']), hide_index=True, use_container_width=True)
