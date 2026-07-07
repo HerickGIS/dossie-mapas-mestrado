@@ -407,7 +407,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             if "Rosca" in tipo_grafico or "Pizza" in tipo_grafico: fig.update_traces(textposition='inside', textinfo='percent+label')
             st.plotly_chart(fig, use_container_width=True)
 
-       with col_g2:
+with col_g2:
             st.markdown(f"**Tabela Resumo Analítica**")
             df_visual = resumo_df[group_cols + ['Geometria_Calc', '%']].copy()
             df_visual.columns = group_cols + [und, 'Proporção (%)']
