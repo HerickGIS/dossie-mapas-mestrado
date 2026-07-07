@@ -126,10 +126,10 @@ if modo_analise == "1. Visão Geral (StoryMap)":
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             st.markdown("**Vulnerabilidade Natural (VN):**")
-            st.latex(r"VN = \frac{\text{Geomorfo} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso/Cobertura}}{5}")
+            st.latex(r"VN = \frac{\text{Geomorfologia} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso e Cobertura da Terra}}{5}")
         with col_m2:
             st.markdown("**Vulnerabilidade Ambiental (VA):**")
-            st.latex(r"VA = 0.2[\text{Geomorfo}] + 0.1[\text{Geologia}] + 0.1[\text{Pedologia}] + 0.1[\text{Vegetação}] + 0.5[\text{Uso/Cobertura}]")
+            st.latex(r"VA = 0.2[\text{Geomorfologia}] + 0.1x[\text{Geologia}] + 0.1x[\text{Pedologia}] + 0.1x[\text{Vegetação}] + 0.5x[\text{Uso e Cobertura da Terra}]")
 
     st.markdown("---")
 
