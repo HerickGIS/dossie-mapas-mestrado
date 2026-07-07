@@ -338,51 +338,227 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
     # -----------------------------------------------------------------
     # RENDERING DO LABORATÓRIO (PAINEL ESTATÍSTICO)
     # -----------------------------------------------------------------
-    if st.session_state["gdf_processado"] is not None:
-        gdf_trabalho = st.session_state["gdf_processado"].copy()
-        coluna_foco = st.session_state["coluna_analise"]
-        coluna_sec = st.session_state["coluna_analise_sec"]
-        camada_nome = st.session_state["nome_camada_ativa"]
-        und = st.session_state["unidade_medida"]
+    # =====================================================================
+# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO 
+# =====================================================================
+elif modo_analise == "2. Laboratório de Geoprocessamento":
+    with st.expander("💡 Guia de Métodos e Álgebra Espacial (Dicas Técnicas)", expanded=False):
+        st.markdown("""
+        * **Intersecção (Spatial Join Restrito):** Isola a tabela de atributos e as feições geográficas rigorosamente dentro do perímetro de corte.
+        * **Filtro Avançado (SQL):** Permite fatiar e filtrar os dados brutos usando expressões condicionais matemáticas ou textuais antes de qualquer corte geográfico.
+        * **Buffer de Zona de Amortecimento:** Adiciona um raio ao redor da faca de recorte. Útil para avaliar APP ou impactos marginais.
+        * **Densidade de Kernel (KDE):** Gera mapa de calor para pontos de ocorrência.
+        """)
 
-        if coluna_foco not in gdf_trabalho.columns:
-            if f"{coluna_foco}_1" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_1"
-        if coluna_sec and coluna_sec not in gdf_trabalho.columns:
-            if f"{coluna_sec}_1" in gdf_trabalho.columns: coluna_sec = f"{coluna_sec}_1"
+    st.sidebar.subheader("🎯 1. Camada de Estudo")
+    camada_alvo = st.sidebar.selectbox("O que será analisado/recortado?", list(mapas_encontrados.keys()), index=0, help="A camada cujos dados sofrerão o cálculo estatístico.")
+    gdf_alvo_bruto = carregar_mapa(str(mapas_encontrados[camada_alvo]))
+    col_alvo_selecionada = st.sidebar.selectbox("Escolha o atributo base da análise:", extrair_colunas_validas(gdf_alvo_bruto), help="Coluna categórica para gerar gráficos.")
 
-        gdf_trabalho[coluna_foco] = gdf_trabalho[coluna_foco].fillna("SEM DADO").astype(str).str.upper().str.strip()
-        if coluna_sec: gdf_trabalho[coluna_sec] = gdf_trabalho[coluna_sec].fillna("SEM DADO").astype(str).str.upper().str.strip()
-        paleta_mestra = gerar_paleta(gdf_trabalho[coluna_foco], camada_nome)
+    cruzar_segundo = st.sidebar.checkbox("🔗 Cruzar com 2ª Análise Atributiva", value=False, help="Adiciona uma sub-categoria à análise, útil em gráficos de barras pareadas.")
+    col_alvo_secundada = None
+    if cruzar_segundo: col_alvo_secundada = st.sidebar.selectbox("Segundo atributo para correlação:", [c for c in extrair_colunas_validas(gdf_alvo_bruto) if c != col_alvo_selecionada])
 
+    with st.sidebar.expander("🛠️ Filtro Avançado SQL", expanded=False):
+        st.markdown("Construa uma equação condicional para filtrar os dados ANTES do recorte.")
+        usar_filtro_sql = st.checkbox("Habilitar Filtro SQL")
+        if usar_filtro_sql:
+            col_sql = st.selectbox("Filtrar na Coluna:", extrair_colunas_validas(gdf_alvo_bruto))
+            operador = st.selectbox("Operador Logico:", ["==", "!=", ">", "<", ">=", "<="])
+            
+            if pd.api.types.is_numeric_dtype(gdf_alvo_bruto[col_sql]):
+                val_sql = st.number_input("Valor Numérico:", value=0.0)
+                query_str = f"`{col_sql}` {operador} {val_sql}"
+            else:
+                valores_unicos_col = sorted(gdf_alvo_bruto[col_sql].dropna().astype(str).unique())
+                val_sql = st.selectbox("Valor do Texto:", valores_unicos_col)
+                query_str = f"`{col_sql}` {operador} '{val_sql}'"
+            
+            try:
+                gdf_alvo_bruto = gdf_alvo_bruto.query(query_str)
+                st.success(f"SQL Aplicado: {len(gdf_alvo_bruto)} feições restaram.")
+            except Exception as e:
+                st.error(f"Erro na expressão SQL.")
+
+    st.sidebar.subheader("✂️ 2. Máscara de Recorte e Buffer")
+    origem_mascara = st.sidebar.radio("Definir área de recorte:", ["📂 Usar Camada do Banco de Dados", "🖍️ Desenhar Área Personalizada"], help="Corte pelo limite de um município ou desenhe livremente no mapa.")
+    buffer_metros = st.sidebar.number_input("Adicionar Buffer à Máscara (metros):", min_value=0, value=0, step=100, help="Expande a área da faca para criar uma zona de influência ao redor.")
+
+    valor_faca, col_mask_selecionada = None, None
+    if origem_mascara == "📂 Usar Camada do Banco de Dados":
+        camada_mascara = st.sidebar.selectbox("Qual camada fará o corte?", list(mapas_encontrados.keys()), index=1)
+        gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
+        col_mask_selecionada = st.sidebar.selectbox("Coluna delimitadora de corte:", extrair_colunas_validas(gdf_mask_bruto))
+        valores_recorte = sorted(gdf_mask_bruto[col_mask_selecionada].astype(str).unique())
+        valor_faca = st.sidebar.selectbox(f"Selecione o limite exato de {col_mask_selecionada}:", valores_recorte)
+
+    # -----------------------------------------------------------------
+    # PROCESSAMENTO PRINCIPAL
+    # -----------------------------------------------------------------
+    if st.sidebar.button("⚙️ Executar Geoprocessamento", type="primary", help="Realiza a intersecção (Corte/Clip) entre a Camada de Estudo e a Área de Máscara."):
+        with st.spinner("Cortando geometrias e recalculando tabelas..."):
+            try:
+                if gdf_alvo_bruto.empty:
+                    st.sidebar.error("A camada alvo está vazia (verifique seu Filtro SQL).")
+                    st.stop()
+
+                gdf_a = gdf_alvo_bruto.to_crs(epsg=31984)
+
+                if origem_mascara == "📂 Usar Camada do Banco de Dados":
+                    gdf_m = gdf_mask_bruto.to_crs(epsg=31984)
+                    mascara_filtrada = gdf_m[gdf_m[col_mask_selecionada].astype(str) == str(valor_faca)][['geometry']]
+                else:
+                    if st.session_state.get('last_draw'):
+                        mascara_filtrada = gpd.GeoDataFrame.from_features(st.session_state['last_draw'], crs="EPSG:4326").to_crs(epsg=31984)
+                    else:
+                        st.sidebar.error("⚠️ Desenhe uma forma geométrica no mapa central primeiro e DEPOIS clique em Executar!")
+                        st.stop()
+
+                if buffer_metros > 0: mascara_filtrada.geometry = mascara_filtrada.geometry.buffer(buffer_metros)
+                st.session_state["buffer_geom"] = mascara_filtrada.to_crs(epsg=4326)
+
+                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how="intersection")
+
+                if gdf_cortado.empty:
+                    st.sidebar.error("Sem intersecção física dentro dos limites determinados.")
+                else:
+                    if gdf_cortado.geometry.type.isin(['Polygon', 'MultiPolygon']).any():
+                        gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.area / 10**6
+                        st.session_state["unidade_medida"] = "Área (km²)"
+                    else:
+                        gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.length / 1000
+                        st.session_state["unidade_medida"] = "Extensão (km)"
+
+                    st.session_state["gdf_processado"] = gdf_cortado
+                    st.session_state["coluna_analise"] = col_alvo_selecionada
+                    st.session_state["coluna_analise_sec"] = col_alvo_secundada if cruzar_segundo else None
+                    st.session_state["nome_camada_ativa"] = camada_alvo
+            except Exception as e:
+                st.sidebar.error(f"Erro no geoprocessamento: {e}")
+
+    # -----------------------------------------------------------------
+    # RENDERIZAÇÃO DO LABORATÓRIO (LAYOUT LADO A LADO)
+    # -----------------------------------------------------------------
+    st.markdown("---")
+    col_mapa, col_estatistica = st.columns([1, 1], gap="large")
+
+    # ================== COLUNA ESQUERDA: MAPA ==================
+    with col_mapa:
+        st.markdown("### 🗺️ Workspace Cartográfico Central")
+        st.caption("Acompanhe o mapa com sua área. **Desenhe com as ferramentas, depois clique em Executar.**")
+
+        if st.session_state["gdf_processado"] is not None and st.session_state["gdf_processado"].geometry.type.isin(['Point', 'MultiPoint']).any():
+            col_kde1, col_kde2 = st.columns(2)
+            with col_kde1: habilitar_kde = st.checkbox("🔥 Ativar Densidade de Kernel", value=False)
+            with col_kde2: simbolo_lab = st.selectbox("📌 Formato do Ponto Cartográfico:", ["🟢 Círculo", "🔶 Losango", "◼️ Quadrado", "🔺 Triângulo"])
+
+        m_lab = folium.Map(location=centroide_mapa, zoom_start=9, tiles=None, control_scale=True)
+        adicionar_elementos_cartograficos(m_lab)
+
+        if origem_mascara == "🖍️ Desenhar Área Personalizada":
+            Draw(export=False, position='topleft').add_to(m_lab)
+
+        if st.session_state["buffer_geom"] is not None:
+            def style_faca(x): return {'color': 'red', 'weight': 2, 'dashArray': '5, 5', 'fillOpacity': 0.05}
+            folium.GeoJson(st.session_state["buffer_geom"], name="Área de Recorte / Buffer", style_function=style_faca).add_to(m_lab)
+
+        if st.session_state["gdf_processado"] is not None:
+            gdf_wgs84 = st.session_state["gdf_processado"].copy().to_crs(epsg=4326)
+            coluna_foco_mapa = st.session_state["coluna_analise"]
+            if coluna_foco_mapa not in gdf_wgs84.columns and f"{coluna_foco_mapa}_1" in gdf_wgs84.columns: 
+                coluna_foco_mapa = f"{coluna_foco_mapa}_1"
+            
+            cols_popup = extrair_colunas_validas(gdf_wgs84)[:5]
+            fg_lab = folium.FeatureGroup(name=f"Análise Recortada: {camada_alvo}")
+            paleta_mapa = gerar_paleta(gdf_wgs84[coluna_foco_mapa].fillna("SEM DADO").astype(str).str.upper().str.strip(), camada_alvo)
+
+            if gdf_wgs84.geometry.type.isin(['Point', 'MultiPoint']).any():
+                if habilitar_kde:
+                    heat_data = []
+                    for geom in gdf_wgs84.geometry:
+                        if geom.type == 'Point': heat_data.append([geom.y, geom.x])
+                        elif geom.type == 'MultiPoint': heat_data.extend([[p.y, p.x] for p in geom.geoms])
+                    HeatMap(heat_data, radius=18, blur=15, name="Kernel KDE").add_to(m_lab)
+
+                for idx, row in gdf_wgs84.iterrows():
+                    geom = row.geometry
+                    if geom is None: continue
+                    valor = str(row.get(coluna_foco_mapa, '')).strip().upper()
+                    cor = paleta_mapa.get(valor, '#969696')
+                    html = "".join([f"<b>{c}:</b> {row.get(c, '')}<br>" for c in cols_popup])
+                    coords = [[geom.y, geom.x]] if geom.type == 'Point' else [[p.y, p.x] for p in geom.geoms]
+
+                    for coord in coords:
+                        if "Losango" in simbolo_lab: folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=0, radius=7, color='#222', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
+                        elif "Quadrado" in simbolo_lab: folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=45, radius=7, color='#222', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
+                        elif "Triângulo" in simbolo_lab: folium.RegularPolygonMarker(location=coord, number_of_sides=3, rotation=0, radius=8, color='#222', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
+                        else: folium.CircleMarker(location=coord, radius=5, color='#222', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
+            else:
+                def estilo_lab(feature):
+                    cor = paleta_mapa.get(str(feature['properties'].get(coluna_foco_mapa, '')).strip().upper(), '#969696')
+                    if feature['geometry']['type'] in ['LineString', 'MultiLineString']: return {'color': cor, 'weight': 4, 'opacity': 1}
+                    return {'fillColor': cor, 'color': '#222222', 'weight': 1, 'fillOpacity': 0.85}
+
+                folium.GeoJson(
+                    gdf_wgs84, name="Resultado_Recortado", style_function=estilo_lab,
+                    popup=folium.GeoJsonPopup(fields=cols_popup, aliases=[f"<b>{c}</b>" for c in cols_popup]) if cols_popup else None,
+                    highlight_function=lambda x: {'weight': 3, 'color': 'white'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 6, 'color': 'red'}
+                ).add_to(fg_lab)
+
+            fg_lab.add_to(m_lab)
+
+        folium.LayerControl(collapsed=True).add_to(m_lab)
+
+        draw_res = st_folium(m_lab, use_container_width=True, height=650, key="mapa_laboratorio_unico", return_on_hover=False)
+        if origem_mascara == "🖍️ Desenhar Área Personalizada" and draw_res and draw_res.get("all_drawings"):
+            st.session_state['last_draw'] = draw_res["all_drawings"]
+
+    # ================== COLUNA DIREITA: ESTATÍSTICA ==================
+    with col_estatistica:
         st.markdown("### 📊 Painel Estatístico Integrado")
+        
+        if st.session_state["gdf_processado"] is not None:
+            gdf_trabalho = st.session_state["gdf_processado"].copy()
+            coluna_foco = st.session_state["coluna_analise"]
+            coluna_sec = st.session_state["coluna_analise_sec"]
+            camada_nome = st.session_state["nome_camada_ativa"]
+            und = st.session_state["unidade_medida"]
 
-        cols_numericas = [c for c in gdf_trabalho.columns if pd.api.types.is_numeric_dtype(gdf_trabalho[c]) and c.lower() not in ['id', 'fid', 'objectid', 'shape_area', 'shape_length', 'geometria_calc']]
+            if coluna_foco not in gdf_trabalho.columns:
+                if f"{coluna_foco}_1" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_1"
+            if coluna_sec and coluna_sec not in gdf_trabalho.columns:
+                if f"{coluna_sec}_1" in gdf_trabalho.columns: coluna_sec = f"{coluna_sec}_1"
 
-        col_ctrl1, col_ctrl2, col_ctrl3 = st.columns(3)
-        with col_ctrl1: tipo_grafico = st.selectbox("Formato Gráfico:", ["Rosca", "Pizza", "Barras Horizontais", "Barras Verticais", "Linhas", "Radar"], help="Escolha a representação visual dos dados fatiados.")
-        with col_ctrl2: filtro_usuario = st.multiselect("🔍 Filtrar Atributos Pós-Recorte:", options=sorted(list(gdf_trabalho[coluna_foco].unique())))
-        with col_ctrl3:
-            col_soma = None
-            if cols_numericas: col_soma = st.selectbox("🧮 Somar Coluna Numérica (Opcional):", ["Nenhuma"] + cols_numericas, help="Realiza a soma total de variáveis nativas da tabela, como população ou volume.")
+            gdf_trabalho[coluna_foco] = gdf_trabalho[coluna_foco].fillna("SEM DADO").astype(str).str.upper().str.strip()
+            if coluna_sec: gdf_trabalho[coluna_sec] = gdf_trabalho[coluna_sec].fillna("SEM DADO").astype(str).str.upper().str.strip()
+            paleta_mestra = gerar_paleta(gdf_trabalho[coluna_foco], camada_nome)
 
-        if filtro_usuario: gdf_trabalho = gdf_trabalho[gdf_trabalho[coluna_foco].isin(filtro_usuario)]
+            cols_numericas = [c for c in gdf_trabalho.columns if pd.api.types.is_numeric_dtype(gdf_trabalho[c]) and c.lower() not in ['id', 'fid', 'objectid', 'shape_area', 'shape_length', 'geometria_calc']]
 
-        if gdf_trabalho.geometry.type.isin(['Point', 'MultiPoint']).any():
-            gdf_trabalho['Geometria_Calc'] = 1
-            und = "Quantidade (Pontos)"
+            col_ctrl1, col_ctrl2 = st.columns(2)
+            with col_ctrl1: tipo_grafico = st.selectbox("Formato Gráfico:", ["Rosca", "Pizza", "Barras Horizontais", "Barras Verticais", "Linhas", "Radar"], help="Escolha a representação visual.")
+            with col_ctrl2: 
+                col_soma = None
+                if cols_numericas: col_soma = st.selectbox("🧮 Somar Coluna (Opcional):", ["Nenhuma"] + cols_numericas)
+            
+            filtro_usuario = st.multiselect("🔍 Filtrar Atributos Pós-Recorte:", options=sorted(list(gdf_trabalho[coluna_foco].unique())))
 
-        if col_soma and col_soma != "Nenhuma":
-            st.info(f"📍 **Destaque de Somatório:** O total acumulado do atributo **{col_soma}** é **{gdf_trabalho[col_soma].sum():,.2f}**.")
+            if filtro_usuario: gdf_trabalho = gdf_trabalho[gdf_trabalho[coluna_foco].isin(filtro_usuario)]
 
-        group_cols = [coluna_foco, coluna_sec] if coluna_sec else [coluna_foco]
-        resumo_df = gdf_trabalho.groupby(group_cols)['Geometria_Calc'].sum().reset_index()
-        resumo_df['%'] = (resumo_df['Geometria_Calc'] / resumo_df['Geometria_Calc'].sum()) * 100
-        resumo_df = resumo_df.sort_values(by='Geometria_Calc', ascending=False)
+            if gdf_trabalho.geometry.type.isin(['Point', 'MultiPoint']).any():
+                gdf_trabalho['Geometria_Calc'] = 1
+                und = "Quantidade (Pontos)"
 
-        resumo_df['Rotulo'] = resumo_df.apply(lambda row: f"{row['Geometria_Calc']:.2f} {und.split(' ')[0]} ({row['%']:.1f}%)", axis=1)
+            if col_soma and col_soma != "Nenhuma":
+                st.info(f"📍 **Destaque de Somatório:** O total de **{col_soma}** é **{gdf_trabalho[col_soma].sum():,.2f}**.")
 
-        col_g1, col_g2 = st.columns([6, 4])
-        with col_g1:
+            group_cols = [coluna_foco, coluna_sec] if coluna_sec else [coluna_foco]
+            resumo_df = gdf_trabalho.groupby(group_cols)['Geometria_Calc'].sum().reset_index()
+            resumo_df['%'] = (resumo_df['Geometria_Calc'] / resumo_df['Geometria_Calc'].sum()) * 100
+            resumo_df = resumo_df.sort_values(by='Geometria_Calc', ascending=False)
+
+            resumo_df['Rotulo'] = resumo_df.apply(lambda row: f"{row['Geometria_Calc']:.2f} {und.split(' ')[0]} ({row['%']:.1f}%)", axis=1)
+
             if "Rosca" in tipo_grafico: fig = px.pie(resumo_df, values='Geometria_Calc', names=coluna_foco, hole=0.4, color=coluna_foco, color_discrete_map=paleta_mestra)
             elif "Pizza" in tipo_grafico: fig = px.pie(resumo_df, values='Geometria_Calc', names=coluna_foco, color=coluna_foco, color_discrete_map=paleta_mestra)
             elif "Horizontais" in tipo_grafico: fig = px.bar(resumo_df, x='Geometria_Calc', y=coluna_foco, color=coluna_sec if coluna_sec else coluna_foco, color_discrete_map=None if coluna_sec else paleta_mestra, barmode="group", text='Rotulo', orientation='h')
@@ -390,12 +566,10 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             elif "Linhas" in tipo_grafico: fig = px.line(resumo_df, x=coluna_foco, y='Geometria_Calc', color=coluna_sec if coluna_sec else None, markers=True)
             elif "Radar" in tipo_grafico: fig = px.line_polar(resumo_df, r='Geometria_Calc', theta=coluna_foco, color=coluna_sec if coluna_sec else None, line_close=True)
 
-            fig.update_layout(margin=dict(t=10, b=0, l=0, r=0))
+            fig.update_layout(margin=dict(t=10, b=0, l=0, r=0), height=350)
             if "Rosca" in tipo_grafico or "Pizza" in tipo_grafico: fig.update_traces(textposition='inside', textinfo='percent+label')
             st.plotly_chart(fig, use_container_width=True)
 
-        with col_g2:
-            st.markdown(f"**Tabela Resumo Analítica**")
             df_visual = resumo_df[group_cols + ['Geometria_Calc', '%']].copy()
             df_visual.columns = group_cols + [und, 'Proporção (%)']
             df_visual[und] = df_visual[und].round(3)
@@ -407,73 +581,8 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
 
             def highlight_last_row(s): return ['font-weight: bold' if s.name == len(df_visual)-1 else '' for v in s]
             st.dataframe(df_visual.style.apply(highlight_last_row, axis=1), hide_index=True, use_container_width=True)
-
-    # -----------------------------------------------------------------
-    # RENDERIZAÇÃO DO MAPA CENTRAL E FERRAMENTAS DE DESENHO
-    # -----------------------------------------------------------------
-    st.markdown("### 🗺️ Workspace Cartográfico Central")
-    st.caption("Acompanhe o mapa com sua área. **Desenhe com as ferramentas, depois clique em Executar na barra lateral.**")
-
-    if st.session_state["gdf_processado"] is not None and st.session_state["gdf_processado"].geometry.type.isin(['Point', 'MultiPoint']).any():
-        col_kde1, col_kde2 = st.columns(2)
-        with col_kde1: habilitar_kde = st.checkbox("🔥 Ativar Densidade de Kernel / Mapa de Calor", value=False)
-        with col_kde2: simbolo_lab = st.selectbox("📌 Formato do Ponto Cartográfico:", ["🟢 Círculo", "🔶 Losango", "◼️ Quadrado", "🔺 Triângulo"])
-
-    m_lab = folium.Map(location=centroide_mapa, zoom_start=9, tiles=None, control_scale=True)
-    adicionar_elementos_cartograficos(m_lab)
-
-    if origem_mascara == "🖍️ Desenhar Área Personalizada":
-        Draw(export=False, position='topleft').add_to(m_lab)
-
-    if st.session_state["buffer_geom"] is not None:
-        def style_faca(x): return {'color': 'red', 'weight': 2, 'dashArray': '5, 5', 'fillOpacity': 0.05}
-        folium.GeoJson(st.session_state["buffer_geom"], name="Área de Recorte / Buffer", style_function=style_faca).add_to(m_lab)
-
-    if st.session_state["gdf_processado"] is not None:
-        gdf_wgs84 = gdf_trabalho.to_crs(epsg=4326)
-        cols_popup = extrair_colunas_validas(gdf_wgs84)[:5]
-        fg_lab = folium.FeatureGroup(name=f"Análise Recortada: {camada_nome}")
-
-        if gdf_wgs84.geometry.type.isin(['Point', 'MultiPoint']).any():
-            if habilitar_kde:
-                heat_data = []
-                for geom in gdf_wgs84.geometry:
-                    if geom.type == 'Point': heat_data.append([geom.y, geom.x])
-                    elif geom.type == 'MultiPoint': heat_data.extend([[p.y, p.x] for p in geom.geoms])
-                HeatMap(heat_data, radius=18, blur=15, name="Kernel KDE").add_to(m_lab)
-
-            for idx, row in gdf_wgs84.iterrows():
-                geom = row.geometry
-                if geom is None: continue
-                valor = str(row.get(coluna_foco, '')).strip().upper()
-                cor = paleta_mestra.get(valor, '#969696')
-                html = "".join([f"<b>{c}:</b> {row.get(c, '')}<br>" for c in cols_popup])
-                coords = [[geom.y, geom.x]] if geom.type == 'Point' else [[p.y, p.x] for p in geom.geoms]
-
-                for coord in coords:
-                    if "Losango" in simbolo_lab: folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=0, radius=7, color='#222', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
-                    elif "Quadrado" in simbolo_lab: folium.RegularPolygonMarker(location=coord, number_of_sides=4, rotation=45, radius=7, color='#222', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
-                    elif "Triângulo" in simbolo_lab: folium.RegularPolygonMarker(location=coord, number_of_sides=3, rotation=0, radius=8, color='#222', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
-                    else: folium.CircleMarker(location=coord, radius=5, color='#222', weight=1, fill_color=cor, fill_opacity=0.9, popup=folium.Popup(html, max_width=300)).add_to(fg_lab)
         else:
-            def estilo_lab(feature):
-                cor = paleta_mestra.get(str(feature['properties'].get(coluna_foco, '')).strip().upper(), '#969696')
-                if feature['geometry']['type'] in ['LineString', 'MultiLineString']: return {'color': cor, 'weight': 4, 'opacity': 1}
-                return {'fillColor': cor, 'color': '#222222', 'weight': 1, 'fillOpacity': 0.85}
-
-            folium.GeoJson(
-                gdf_wgs84, name="Resultado_Recortado", style_function=estilo_lab,
-                popup=folium.GeoJsonPopup(fields=cols_popup, aliases=[f"<b>{c}</b>" for c in cols_popup]) if cols_popup else None,
-                highlight_function=lambda x: {'weight': 3, 'color': 'white'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 6, 'color': 'red'}
-            ).add_to(fg_lab)
-
-        fg_lab.add_to(m_lab)
-
-    folium.LayerControl(collapsed=True).add_to(m_lab)
-
-    draw_res = st_folium(m_lab, use_container_width=True, height=500, key="mapa_laboratorio_unico", return_on_hover=False)
-    if origem_mascara == "🖍️ Desenhar Área Personalizada" and draw_res and draw_res.get("all_drawings"):
-        st.session_state['last_draw'] = draw_res["all_drawings"]
+            st.info("👈 **Aguardando Análise.** Desenhe uma área no mapa ao lado (ou selecione na barra lateral) e clique em **Executar Geoprocessamento** para gerar seus gráficos e tabelas.")
 
     # -----------------------------------------------------------------
     # SEÇÃO INFERIOR: DOWNLOADS DE DADOS AUDITADOS
