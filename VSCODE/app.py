@@ -289,26 +289,17 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                     elif geom.type == 'MultiPoint': heat_data.extend([[p.y, p.x] for p in geom.geoms])
                 HeatMap(heat_data, radius=18, blur=15, name="Kernel KDE").add_to(m_lab)
 
-        def estilo_lab(feature, p=paleta_mestra, col=coluna_foco):
+       def estilo_lab(feature, p=paleta_mestra, col=coluna_foco):
             geom_type = feature['geometry']['type']
             valor = str(feature['properties'].get(col, '')).strip().upper()
             cor = p.get(valor, '#969696')
-            
             if geom_type in ['LineString', 'MultiLineString']:
-                return {'color': cor, 'weight': 3, 'opacity': 0.8}
+                return {'color': cor, 'weight': 4, 'opacity': 1}
             elif geom_type in ['Point', 'MultiPoint']:
-                # Estilo de Ponto Minimalista
-                return {
-                    'color': '#333333', 
-                    'fillColor': cor, 
-                    'weight': 0.5, 
-                    'fillOpacity': 0.95, 
-                    'radius': 3
-                }
-            # Estilo padrão para polígonos
-            return {'fillColor': cor, 'color': '#222222', 'weight': 0.8, 'fillOpacity': 0.7}
-
+                return {'color': 'black', 'fillColor': cor, 'weight': 1, 'fillOpacity': 0.9, 'radius': 6}
+            return {'fillColor': cor, 'color': '#222222', 'weight': 1, 'fillOpacity': 0.85}
         cols_popup = extrair_colunas_validas(gdf_wgs84)[:5]
+
         folium.GeoJson(
             gdf_wgs84,
             name="Resultado_Recortado",
