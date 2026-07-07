@@ -266,9 +266,10 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
     st.markdown("### 🗺️ Workspace Cartográfico Central")
     st.caption("Acompanhe aqui o desenho de áreas e o resultado dos geoprocessamentos.")
 
-    m_lab = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles=None)
-    folium.TileLayer('CartoDB positron', name='Mapa Base (Claro)', control=True).add_to(m_lab)
-    folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite (Google Hybrid)', overlay=False, control=True).add_to(m_lab)
+    m_geral = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles=None)
+    folium.TileLayer('CartoDB positron', name='Mapa Base (Claro)', control=True).add_to(m_geral)
+    folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite (Google Hybrid)', overlay=False, control=True).add_to(m_geral)
+    folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='OpenTopoMap', name='Topografia (Curvas de Nível)', overlay=False, control=True).add_to(m_geral)
 
     if origem_mascara == "🖍️ Desenhar Área Personalizada":
         Draw(export=False, position='topleft').add_to(m_lab)
@@ -394,17 +395,12 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         with col_ctrl2: filtro_usuario = st.multiselect("🔍 Filtrar Atributos:", options=sorted(list(gdf_trabalho[coluna_foco].unique())))
         with col_ctrl3:
             col_soma = None
-            if cols_numericas:
-                col_soma = st.selectbox("🧮 Somar Coluna Numérica (Opcional):", ["Nenhuma"] + cols_numericas)
 
         if filtro_usuario: gdf_trabalho = gdf_trabalho[gdf_trabalho[coluna_foco].isin(filtro_usuario)]
 
         if gdf_trabalho.geometry.type.isin(['Point', 'MultiPoint']).any():
             gdf_trabalho['Geometria_Calc'] = 1
             und = "Quantidade (Pontos)"
-
-        if col_soma and col_soma != "Nenhuma":
-            st.info(f"📍 **Destaque:** O somatório total do atributo **{col_soma}** na área recortada é **{gdf_trabalho[col_soma].sum():,.2f}**.")
 
         group_cols = [coluna_foco, coluna_sec] if coluna_sec else [coluna_foco]
         resumo_df = gdf_trabalho.groupby(group_cols)['Geometria_Calc'].sum().reset_index()
@@ -450,13 +446,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         
         geojson_str = gdf_trabalho.to_crs(epsg=4326).to_json()
         exp_col1.download_button(label="🌍 Exportar GeoJSON", data=geojson_str, file_name=f"recorte.geojson", mime="application/json", use_container_width=True)
-        
-        try:
-            kml_buffer = io.BytesIO()
-            gpd.io.file.fiona.drvsupport.supported_drivers['KML'] = 'rw'
-            gdf_trabalho.to_crs(epsg=4326).to_file(kml_buffer, driver="KML")
-            exp_col2.download_button(label="🗺️ Exportar KML (Google Earth)", data=kml_buffer.getvalue(), file_name=f"recorte.kml", mime="application/vnd.google-earth.kml+xml", use_container_width=True)
-        except: exp_col2.info("KML disponível via conversão no QGIS.")
 
         try:
             shp_buffer = io.BytesIO()
