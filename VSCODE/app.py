@@ -102,7 +102,6 @@ def adicionar_elementos_cartograficos(mapa_folium):
     folium.TileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', attr='Google', name='Satélite Puro (Google)', overlay=False, control=True).add_to(mapa_folium)
     folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido (Google)', overlay=False, control=True).add_to(mapa_folium)
     folium.TileLayer('OpenStreetMap', name='Street Maps (OSM)', control=True).add_to(mapa_folium)
-    folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='OpenTopoMap', name='Topografia (Curvas de Nível)', overlay=False, control=True).add_to(m_geral)
 
     # Adição da Coordenada Geográfica dinâmica no ponteiro do mouse
     MousePosition(position='bottomright', separator=' | ', empty_string='Fora do Mapa', num_digits=5, prefix='Coordenada:').add_to(mapa_folium)
