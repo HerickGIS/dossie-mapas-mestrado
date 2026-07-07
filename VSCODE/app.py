@@ -400,7 +400,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         with col_kde2: simbolo_lab = st.selectbox("📌 Formato do Ponto Cartográfico:", ["🟢 Círculo", "🔶 Losango", "◼️ Quadrado", "🔺 Triângulo"])
 
     m_lab = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles=None, control_scale=True)
-    adicionar_elementos_cartograficos(m_lab, m_geral)
+    adicionar_elementos_cartograficos(m_lab)
 
     if origem_mascara == "🖍️ Desenhar Área Personalizada":
         Draw(export=False, position='topleft').add_to(m_lab)
