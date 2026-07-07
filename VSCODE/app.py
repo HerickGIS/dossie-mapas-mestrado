@@ -517,20 +517,13 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
         st.image(str(caminho_imagem), caption=f"Fonte: Dissertação - {mapa_escolhido}", use_container_width=True)
 
 # =====================================================================
-# RODAPÉ LATERAL: AUTOR E PESQUISA
-# =====================================================================
-# =====================================================================
-# RODAPÉ LATERAL: AUTOR E PESQUISA
+# RODAPÉ LATERAL: AUTOR E PESQUISA (VERSÃO SEGURA)
 # =====================================================================
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎓 Sobre a Pesquisa")
-st.sidebar.info("""
-**Autor:** Herick Santos  
-*Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*
-
-Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica.
-
----
-[Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)  
-[Dissertação de Mestrado (UERN)](https://sucupira-legado.capes.gov.br/sucupira/public/consultas/coleta/trabalhoConclusao/viewTrabalhoConclusao.jsf?popup=true&id_trabalho=15178165)
-""")
+st.sidebar.markdown("**Autor:** Herick Santos")
+st.sidebar.markdown("*Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*")
+st.sidebar.markdown("Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica.")
+st.sidebar.markdown("---")
+st.sidebar.markdown("[Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)")
+st.sidebar.markdown("[Dissertação de Mestrado (UERN)](https://sucupira-legado.capes.gov.br/sucupira/public/consultas/coleta/trabalhoConclusao/viewTrabalhoConclusao.jsf?popup=true&id_trabalho=15178165)")
