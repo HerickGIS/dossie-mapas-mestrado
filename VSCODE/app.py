@@ -30,7 +30,7 @@ st.markdown("**Análise Espacial, Ecodinâmica e Geoprocessamento Dinâmico**")
 # =====================================================================
 # 2. RADAR DE ARQUIVOS (OTIMIZADO PARA AMBIENTE CLOUD)
 # =====================================================================
-# Mapeia dinamicamente os arquivos na pasta 'data', ignorando o sistema do servidor
+# Mapeia os arquivos na pasta 'data'
 BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent if BASE_DIR.name == "VSCODE" else BASE_DIR
 
