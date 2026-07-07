@@ -13,7 +13,7 @@ import zipfile
 # =====================================================================
 # 1. CONFIGURAÇÃO E ESTADO DA SESSÃO
 # =====================================================================
-st.set_page_config(page_title="Dossiê BHRC | Ecodinâmica", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Dossiê BHRC | Álgebra de Mapas", layout="wide", initial_sidebar_state="expanded")
 
 if "gdf_processado" not in st.session_state: st.session_state["gdf_processado"] = None
 if "coluna_analise" not in st.session_state: st.session_state["coluna_analise"] = None
