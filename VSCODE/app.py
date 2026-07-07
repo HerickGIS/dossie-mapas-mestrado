@@ -407,7 +407,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             if "Rosca" in tipo_grafico or "Pizza" in tipo_grafico: fig.update_traces(textposition='inside', textinfo='percent+label')
             st.plotly_chart(fig, use_container_width=True)
 
-with col_g2:
+        with col_g2:
             st.markdown(f"**Tabela Resumo Analítica**")
             df_visual = resumo_df[group_cols + ['Geometria_Calc', '%']].copy()
             df_visual.columns = group_cols + [und, 'Proporção (%)']
@@ -431,6 +431,14 @@ with col_g2:
             # --------------------------------
             
             st.dataframe(df_final_exibicao.round(3), hide_index=True, use_container_width=True)
+
+        # Seção de Downloads e Tabela Completa Totalizador
+        st.markdown("---")
+        st.subheader("📥 Exportação Cartográfica do Recorte")
+        exp_col1, exp_col2, exp_col3 = st.columns(3)
+        
+        geojson_str = gdf_trabalho.to_crs(epsg=4326).to_json()
+        exp_col1.download_button(label="🌍 Exportar GeoJSON", data=geojson_str, file_name=f"recorte_{camada_nome.lower()}.geojson", mime="application/json", use_container_width=True)
         
         try:
             kml_buffer = io.BytesIO()
