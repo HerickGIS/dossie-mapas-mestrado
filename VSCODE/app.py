@@ -108,7 +108,7 @@ def adicionar_elementos_cartograficos(mapa_folium):
     
     # Rosa dos Ventos (Norte Geográfico) inserida no canto superior
     url_norte = 'https://upload.wikimedia.org/wikipedia/commons/9/99/Compass_rose_simple.svg'
-    FloatImage(url_norte, bottom=75, left=1).add_to(mapa_folium) # Posicionamento relativo em CSS
+    FloatImage(url_norte, bottom=95, left=3).add_to(mapa_folium) # Posicionamento relativo em CSS
 
 # =====================================================================
 # 4. PAINEL LATERAL (CONTROLE GERAL)
