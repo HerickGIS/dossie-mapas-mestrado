@@ -57,16 +57,20 @@ def carregar_mapa(caminho):
     return gpd.read_file(caminho)
 
 @st.cache_data(show_spinner=False)
-def obter_centroide_bacia(caminho_bacia):
+def obter_limites_bacia(caminho_bacia):
+    """Calcula o centroide e a caixa delimitadora (bounds) da bacia para o Zoom to Layer automático."""
     try:
         gdf = gpd.read_file(caminho_bacia).to_crs(epsg=4326)
-        return [gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()]
+        centro = [gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()]
+        bounds = gdf.total_bounds 
+        limites = [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
+        return centro, limites
     except:
-        return [-5.6, -37.6]
+        return [-5.6, -37.6], [[-6.0, -38.0], [-5.0, -37.0]]
 
-# Identifica a Bacia e gera a coordenada central
+# Identifica a Bacia e gera a coordenada central e os limites de enquadramento
 bacia_key = next((k for k in mapas_encontrados.keys() if "bacia" in k.lower() or "limite" in k.lower()), list(mapas_encontrados.keys())[0])
-centroide_mapa = obter_centroide_bacia(str(mapas_encontrados[bacia_key]))
+centroide_mapa, limites_bacia = obter_limites_bacia(str(mapas_encontrados[bacia_key]))
 
 def extrair_colunas_validas(gdf):
     return [col for col in gdf.columns if col.lower() not in ['geometry', 'id', 'fid', 'objectid', 'shape_area', 'shape_length']]
@@ -170,7 +174,8 @@ if modo_analise == "1. Visão Geral":
 
             estilos_camadas[nome_camada] = {"opacidade": opacidade, "tipo_cor": tipo_cor, "coluna": col_escolhida, "cor_unica": cor_unica, "simbolo": simbolo_pt}
 
-    m_geral = folium.Map(location=centroide_mapa, zoom_start=9, tiles=None, control_scale=True)
+    # Mapa sem zoom inicial fixo (será ajustado pelos limites)
+    m_geral = folium.Map(location=centroide_mapa, tiles=None, control_scale=True)
     adicionar_elementos_cartograficos(m_geral)
     tabelas_brutas = {}
 
@@ -224,6 +229,8 @@ if modo_analise == "1. Visão Geral":
         fg.add_to(m_geral)
         tabelas_brutas[nome_camada] = gdf.drop(columns=['geometry'])
 
+    # Enquadramento Dinâmico
+    m_geral.fit_bounds(limites_bacia)
     folium.LayerControl(collapsed=False).add_to(m_geral)
 
     st.subheader("Visualizador Exploratório")
@@ -351,7 +358,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             with col_kde1: habilitar_kde = st.checkbox("🔥 Ativar Densidade de Kernel", value=False)
             with col_kde2: simbolo_lab = st.selectbox("📌 Formato do Ponto Cartográfico:", ["🟢 Círculo", "🔶 Losango", "◼️ Quadrado", "🔺 Triângulo"])
 
-        m_lab = folium.Map(location=centroide_mapa, zoom_start=9, tiles=None, control_scale=True)
+        m_lab = folium.Map(location=centroide_mapa, tiles=None, control_scale=True)
         adicionar_elementos_cartograficos(m_lab)
 
         if origem_mascara == "🖍️ Desenhar Área Personalizada":
@@ -406,6 +413,8 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
 
             fg_lab.add_to(m_lab)
 
+        # Enquadramento Dinâmico também no Laboratório
+        m_lab.fit_bounds(limites_bacia)
         folium.LayerControl(collapsed=True).add_to(m_lab)
 
         draw_res = st_folium(m_lab, use_container_width=True, height=650, key="mapa_laboratorio_unico", return_on_hover=False)
