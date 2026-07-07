@@ -411,7 +411,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             st.markdown(f"**Tabela Resumo Analítica**")
             df_visual = resumo_df[group_cols + ['Geometria_Calc', '%']].copy()
             df_visual.columns = group_cols + [und, 'Proporção (%)']
-            st.dataframe(df_visual.round(3), hide_index=True, use_container_width=True)
             
             # --- ADIÇÃO DA LINHA DE SOMA ---
             total_valor = df_visual[und].sum()
