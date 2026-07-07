@@ -293,19 +293,11 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             geom_type = feature['geometry']['type']
             valor = str(feature['properties'].get(col, '')).strip().upper()
             cor = p.get(valor, '#969696')
-            
             if geom_type in ['LineString', 'MultiLineString']:
-                return {'color': cor, 'weight': 3, 'opacity': 0.8}
+                return {'color': cor, 'weight': 4, 'opacity': 1}
             elif geom_type in ['Point', 'MultiPoint']:
-                return {
-                    'color': '#333333', 
-                    'fillColor': cor, 
-                    'weight': 0.5, 
-                    'fillOpacity': 0.95, 
-                    'radius': 3
-                }
-            # Estilo padrão para polígonos
-            return {'fillColor': cor, 'color': '#222222', 'weight': 0.8, 'fillOpacity': 0.7}
+                return {'color': 'black', 'fillColor': cor, 'weight': 1, 'fillOpacity': 0.9, 'radius': 6}
+            return {'fillColor': cor, 'color': '#222222', 'weight': 1, 'fillOpacity': 0.85}
 
         cols_popup = extrair_colunas_validas(gdf_wgs84)[:5]
         folium.GeoJson(
@@ -439,7 +431,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             # --------------------------------
             
             st.dataframe(df_final_exibicao.round(3), hide_index=True, use_container_width=True)
-
+            
         # Seção de Downloads e Tabela Completa Totalizador
         st.markdown("---")
         st.subheader("📥 Exportação Cartográfica do Recorte")
