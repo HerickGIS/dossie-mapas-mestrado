@@ -13,7 +13,7 @@ import zipfile
 # =====================================================================
 # 1. CONFIGURAÇÃO E ESTADO DA SESSÃO
 # =====================================================================
-st.set_page_config(page_title="Dossiê BHRC | Álgebra de Mapas", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Dossiê BHRC | Ecodinâmica", layout="wide", initial_sidebar_state="expanded")
 
 if "gdf_processado" not in st.session_state: st.session_state["gdf_processado"] = None
 if "coluna_analise" not in st.session_state: st.session_state["coluna_analise"] = None
@@ -27,7 +27,7 @@ st.title("💧 WebGIS com Sistema de Inteligência Geográfica: Análise dos Sis
 st.markdown("**Análise de Dados Espacial, Ecodinâmica e Geoprocessamento**")
 
 # =====================================================================
-# 2. RADAR DE ARQUIVOS E CACHE (CORRIGIDO PARA BUSCA GERAL RÁPIDA)
+# 2. RADAR DE ARQUIVOS E CACHE GERAL
 # =====================================================================
 BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent if BASE_DIR.name == "VSCODE" else BASE_DIR
@@ -45,7 +45,7 @@ for arquivo in sorted(todos_arquivos):
     nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas").replace("Ibge", "IBGE")
     mapas_encontrados[nome_legivel] = arquivo
 
-# Busca super-rápida de Imagens no repositório inteiro
+# Busca super-rápida de Imagens no repositório inteiro para o Atlas
 todas_imagens = []
 for ext in ['*.png', '*.jpg', '*.jpeg', '*.PNG', '*.JPG', '*.JPEG']:
     todas_imagens.extend([f for f in REPO_DIR.rglob(ext) if 'venv' not in f.parts and '.git' not in f.parts])
@@ -53,18 +53,18 @@ for ext in ['*.png', '*.jpg', '*.jpeg', '*.PNG', '*.JPG', '*.JPEG']:
 mapas_estaticos = {f.stem.replace("_", " ").title(): f for f in sorted(todas_imagens)}
 
 @st.cache_data(show_spinner=False)
-def carregar_mapa(caminho): return gpd.read_file(caminho)
+def carregar_mapa(caminho): 
+    return gpd.read_file(caminho)
 
 @st.cache_data(show_spinner=False)
 def obter_centroide_bacia(caminho_bacia):
-    """Calcula o centroide da bacia para centralizar todos os mapas automaticamente."""
     try:
         gdf = gpd.read_file(caminho_bacia).to_crs(epsg=4326)
         return [gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()]
     except:
-        return [-5.6, -37.6] # Coordenada de segurança
+        return [-5.6, -37.6]
 
-# Busca a camada da bacia automaticamente e define a variável do centroide
+# Identifica a Bacia e gera a coordenada central
 bacia_key = next((k for k in mapas_encontrados.keys() if "bacia" in k.lower() or "limite" in k.lower()), list(mapas_encontrados.keys())[0])
 centroide_mapa = obter_centroide_bacia(str(mapas_encontrados[bacia_key]))
 
@@ -238,107 +238,6 @@ if modo_analise == "1. Visão Geral":
                 st.dataframe(tabelas_brutas[nome], use_container_width=True, hide_index=True)
 
 # =====================================================================
-# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO 
-# =====================================================================
-elif modo_analise == "2. Laboratório de Geoprocessamento":
-    with st.expander("💡 Guia de Métodos e Álgebra Espacial (Dicas Técnicas)", expanded=False):
-        st.markdown("""
-        * **Intersecção (Spatial Join Restrito):** Isola a tabela de atributos e as feições geográficas rigorosamente dentro do perímetro de corte.
-        * **Filtro Avançado (SQL):** Permite fatiar e filtrar os dados brutos usando expressões condicionais matemáticas ou textuais antes de qualquer corte geográfico.
-        * **Buffer de Zona de Amortecimento:** Adiciona um raio ao redor da faca de recorte. Útil para avaliar APP ou impactos marginais.
-        * **Densidade de Kernel (KDE):** Gera mapa de calor para pontos de ocorrência.
-        """)
-
-    st.sidebar.subheader("🎯 1. Camada de Estudo")
-    camada_alvo = st.sidebar.selectbox("O que será analisado/recortado?", list(mapas_encontrados.keys()), index=0, help="A camada cujos dados sofrerão o cálculo estatístico.")
-    gdf_alvo_bruto = carregar_mapa(str(mapas_encontrados[camada_alvo]))
-    col_alvo_selecionada = st.sidebar.selectbox("Escolha o atributo base da análise:", extrair_colunas_validas(gdf_alvo_bruto), help="Coluna categórica para gerar gráficos.")
-
-    cruzar_segundo = st.sidebar.checkbox("🔗 Cruzar com 2ª Análise Atributiva", value=False, help="Adiciona uma sub-categoria à análise, útil em gráficos de barras pareadas.")
-    col_alvo_secundada = None
-    if cruzar_segundo: col_alvo_secundada = st.sidebar.selectbox("Segundo atributo para correlação:", [c for c in extrair_colunas_validas(gdf_alvo_bruto) if c != col_alvo_selecionada])
-
-    with st.sidebar.expander("🛠️ Filtro Avançado SQL", expanded=False):
-        st.markdown("Construa uma equação condicional para filtrar os dados ANTES do recorte.")
-        usar_filtro_sql = st.checkbox("Habilitar Filtro SQL")
-        if usar_filtro_sql:
-            col_sql = st.selectbox("Filtrar na Coluna:", extrair_colunas_validas(gdf_alvo_bruto))
-            operador = st.selectbox("Operador Logico:", ["==", "!=", ">", "<", ">=", "<="])
-            
-            if pd.api.types.is_numeric_dtype(gdf_alvo_bruto[col_sql]):
-                val_sql = st.number_input("Valor Numérico:", value=0.0)
-                query_str = f"`{col_sql}` {operador} {val_sql}"
-            else:
-                valores_unicos_col = sorted(gdf_alvo_bruto[col_sql].dropna().astype(str).unique())
-                val_sql = st.selectbox("Valor do Texto:", valores_unicos_col)
-                query_str = f"`{col_sql}` {operador} '{val_sql}'"
-            
-            try:
-                gdf_alvo_bruto = gdf_alvo_bruto.query(query_str)
-                st.success(f"SQL Aplicado: {len(gdf_alvo_bruto)} feições restaram.")
-            except Exception as e:
-                st.error(f"Erro na expressão SQL.")
-
-    st.sidebar.subheader("✂️ 2. Máscara de Recorte e Buffer")
-    origem_mascara = st.sidebar.radio("Definir área de recorte:", ["📂 Usar Camada do Banco de Dados", "🖍️ Desenhar Área Personalizada"], help="Corte pelo limite de um município ou desenhe livremente no mapa.")
-    buffer_metros = st.sidebar.number_input("Adicionar Buffer à Máscara (metros):", min_value=0, value=0, step=100, help="Expande a área da faca para criar uma zona de influência ao redor.")
-
-    valor_faca, col_mask_selecionada = None, None
-    if origem_mascara == "📂 Usar Camada do Banco de Dados":
-        camada_mascara = st.sidebar.selectbox("Qual camada fará o corte?", list(mapas_encontrados.keys()), index=1)
-        gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
-        col_mask_selecionada = st.sidebar.selectbox("Coluna delimitadora de corte:", extrair_colunas_validas(gdf_mask_bruto))
-        valores_recorte = sorted(gdf_mask_bruto[col_mask_selecionada].astype(str).unique())
-        valor_faca = st.sidebar.selectbox(f"Selecione o limite exato de {col_mask_selecionada}:", valores_recorte)
-
-    # -----------------------------------------------------------------
-    # PROCESSAMENTO PRINCIPAL
-    # -----------------------------------------------------------------
-    if st.sidebar.button("⚙️ Executar Geoprocessamento", type="primary", help="Realiza a intersecção (Corte/Clip) entre a Camada de Estudo e a Área de Máscara."):
-        with st.spinner("Cortando geometrias e recalculando tabelas..."):
-            try:
-                if gdf_alvo_bruto.empty:
-                    st.sidebar.error("A camada alvo está vazia (verifique seu Filtro SQL).")
-                    st.stop()
-
-                gdf_a = gdf_alvo_bruto.to_crs(epsg=31984)
-
-                if origem_mascara == "📂 Usar Camada do Banco de Dados":
-                    gdf_m = gdf_mask_bruto.to_crs(epsg=31984)
-                    mascara_filtrada = gdf_m[gdf_m[col_mask_selecionada].astype(str) == str(valor_faca)][['geometry']]
-                else:
-                    if st.session_state.get('last_draw'):
-                        mascara_filtrada = gpd.GeoDataFrame.from_features(st.session_state['last_draw'], crs="EPSG:4326").to_crs(epsg=31984)
-                    else:
-                        st.sidebar.error("⚠️ Desenhe uma forma geométrica no mapa central primeiro e DEPOIS clique em Executar!")
-                        st.stop()
-
-                if buffer_metros > 0: mascara_filtrada.geometry = mascara_filtrada.geometry.buffer(buffer_metros)
-                st.session_state["buffer_geom"] = mascara_filtrada.to_crs(epsg=4326)
-
-                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how="intersection")
-
-                if gdf_cortado.empty:
-                    st.sidebar.error("Sem intersecção física dentro dos limites determinados.")
-                else:
-                    if gdf_cortado.geometry.type.isin(['Polygon', 'MultiPolygon']).any():
-                        gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.area / 10**6
-                        st.session_state["unidade_medida"] = "Área (km²)"
-                    else:
-                        gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.length / 1000
-                        st.session_state["unidade_medida"] = "Extensão (km)"
-
-                    st.session_state["gdf_processado"] = gdf_cortado
-                    st.session_state["coluna_analise"] = col_alvo_selecionada
-                    st.session_state["coluna_analise_sec"] = col_alvo_secundada if cruzar_segundo else None
-                    st.session_state["nome_camada_ativa"] = camada_alvo
-            except Exception as e:
-                st.sidebar.error(f"Erro no geoprocessamento: {e}")
-
-    # -----------------------------------------------------------------
-    # RENDERING DO LABORATÓRIO (PAINEL ESTATÍSTICO)
-    # -----------------------------------------------------------------
-    # =====================================================================
 # MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO 
 # =====================================================================
 elif modo_analise == "2. Laboratório de Geoprocessamento":
@@ -635,6 +534,7 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
                 st.download_button(label="📥 Baixar Imagem", data=file, file_name=caminho_imagem.name, mime=tipo_mime, type="primary", use_container_width=True)
 
         st.image(str(caminho_imagem), caption=f"Fonte: Dissertação - {mapa_escolhido}", use_container_width=True)
+
 
 # =====================================================================
 # RODAPÉ LATERAL
