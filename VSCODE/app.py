@@ -112,14 +112,14 @@ def adicionar_elementos_cartograficos(mapa_folium):
 st.sidebar.header("⚙️ Configurações da Análise")
 modo_analise = st.sidebar.radio(
     "Escolha o Modo de Navegação:", 
-    ["1. Visão Geral (StoryMap)", "2. Laboratório de Geoprocessamento", "3. Atlas Cartográfico (Imagens)"]
+    ["1. Visão Geral", "2. Laboratório de Geoprocessamento", "3. Atlas Cartográfico (Imagens)"]
 )
 st.sidebar.markdown("---")
 
 # =====================================================================
 # MODO 1: VISÃO GERAL (StoryMap Interativo)
 # =====================================================================
-if modo_analise == "1. Visão Geral (StoryMap)":
+if modo_analise == "1. Visão Geral":
 
     with st.expander("📖 Metodologia: Ecodinâmica de Tricart", expanded=False):
         st.markdown("A modelagem de vulnerabilidade integra a dimensão do meio físico e a pressão antrópica por Álgebra de Mapas.")
