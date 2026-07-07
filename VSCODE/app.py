@@ -243,8 +243,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         * **Intersecção (Spatial Join Restrito):** Isola a tabela de atributos e as feições geográficas rigorosamente dentro do perímetro de corte.
         * **Buffer de Zona de Amortecimento:** Adiciona um raio ao redor da faca de recorte. Útil para avaliar APP ou impactos marginais.
         * **Densidade de Kernel (KDE):** Gera mapa de calor para pontos de ocorrência (Ex: Afloramentos).
-        * **Krigagem (Informação):** A Krigagem é uma interpolação complexa que cria superfícies (Raster) contínuas a partir de *Valores Z* (chuva, cota). Por ser um processo matemático preditivo denso, o WebGIS foca na visualização estatística Vetorial (Kernel e KDE). Para modelos Raster 3D, exporte o dado e utilize rotinas de `pykrige` no QGIS ou ArcGIS.
-        """)
 
     st.sidebar.subheader("🎯 1. Camada de Estudo")
     camada_alvo = st.sidebar.selectbox("O que será analisado/recortado?", list(mapas_encontrados.keys()), index=0)
@@ -403,7 +401,14 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         with col_kde2: simbolo_lab = st.selectbox("📌 Formato do Ponto Cartográfico:", ["🟢 Círculo", "🔶 Losango", "◼️ Quadrado", "🔺 Triângulo"])
 
     m_lab = folium.Map(location=[-5.6, -37.6], zoom_start=9, tiles=None, control_scale=True)
-    adicionar_elementos_cartograficos(m_lab)
+    def adicionar_elementos_cartograficos(mapa_folium, bacia_gdf=None):
+    folium.TileLayer('CartoDB positron', name='Claro').add_to(mapa_folium)
+    folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido').add_to(mapa_folium)
+    
+    # Norte Geográfico (Superior Esquerdo para não conflitar)
+    FloatImage('https://upload.wikimedia.org/wikipedia/commons/9/99/Compass_rose_simple.svg', bottom=90, left=5).add_to(mapa_folium)
+    MousePosition(position='bottomright', prefix='Coordenada:').add_to(mapa_folium)
+    folium.LayerControl().add_to(mapa_folium)
 
     if origem_mascara == "🖍️ Desenhar Área Personalizada":
         Draw(export=False, position='topleft').add_to(m_lab)
