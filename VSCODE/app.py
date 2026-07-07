@@ -412,6 +412,26 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             df_visual = resumo_df[group_cols + ['Geometria_Calc', '%']].copy()
             df_visual.columns = group_cols + [und, 'Proporção (%)']
             st.dataframe(df_visual.round(3), hide_index=True, use_container_width=True)
+            
+            # --- ADIÇÃO DA LINHA DE SOMA ---
+            total_valor = df_visual[und].sum()
+            total_proporcao = df_visual['Proporção (%)'].sum()
+            
+            # Cria um dataframe apenas com a linha de total
+            linha_total = pd.DataFrame({
+                group_cols[0]: ["TOTAL GERAL"],
+                und: [total_valor],
+                'Proporção (%)': [total_proporcao]
+            })
+            
+            # Ajuste caso seja uma análise com dois atributos (BI)
+            if coluna_sec:
+                linha_total[coluna_sec] = ["-"]
+                
+            df_final_exibicao = pd.concat([df_visual, linha_total], ignore_index=True)
+            # --------------------------------
+            
+            st.dataframe(df_final_exibicao.round(3), hide_index=True, use_container_width=True)
 
         # Seção de Downloads e Tabela Completa Totalizador
         st.markdown("---")
