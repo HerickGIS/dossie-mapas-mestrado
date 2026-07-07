@@ -507,21 +507,22 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         with st.expander(f"📋 Tabela de Atributos Combinada Integral"):
             st.dataframe(gdf_trabalho.drop(columns=['geometry']), hide_index=True, use_container_width=True)
 
+# MODO 3: ATLAS CARTOGRÁFICO (Visualização de Imagens)
+
 # =====================================================================
-# MODO 3: ATLAS CARTOGRÁFICO
-# =====================================================================
+
 elif modo_analise == "3. Atlas Cartográfico (Imagens)":
-    st.header("🗺️ Atlas Cartográfico")
-    st.markdown("Visualize ou faça o download dos mapas estáticos em alta resolução.")
+    st.header("🗺️ Atlas Cartográfico (Mapas de Layout)")
+    st.markdown("Visualize ou faça o download dos mapas estáticos em alta resolução produzidos para a pesquisa.")
     st.markdown("---")
 
     if not mapas_estaticos:
-        st.info("💡 Adicione suas imagens na pasta 'data'.")
+        st.info("💡 Nenhuma imagem (PNG, JPG, JPEG) foi encontrada na pasta data. Adicione seus arquivos para listagem automática.")
     else:
         col_selecao, col_download = st.columns([3, 1])
 
         with col_selecao:
-            mapa_escolhido = st.selectbox("Selecione o mapa:", list(mapas_estaticos.keys()))
+            mapa_escolhido = st.selectbox("Selecione o mapa cartográfico para visualizar:", list(mapas_estaticos.keys()))
             caminho_imagem = mapas_estaticos[mapa_escolhido]
 
         with col_download:
@@ -529,9 +530,16 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
             st.write("")
             with open(caminho_imagem, "rb") as file:
                 tipo_mime = "image/png" if caminho_imagem.suffix.lower() == '.png' else "image/jpeg"
-                st.download_button(label="📥 Baixar Imagem", data=file, file_name=caminho_imagem.name, mime=tipo_mime, type="primary", use_container_width=True)
+                st.download_button(
+                    label="📥 Baixar Imagem",
+                    data=file,
+                    file_name=caminho_imagem.name,
+                    mime=tipo_mime,
+                    type="primary",
+                    use_container_width=True
+                )
 
-        st.image(str(caminho_imagem), caption=f"Fonte: Dissertação - {mapa_escolhido}", use_container_width=True)
+        st.image(str(caminho_imagem), caption=f"Fonte: Dissertação de Mestrado - {mapa_escolhido}", use_container_width=True)
 
 # =====================================================================
 # RODAPÉ LATERAL
