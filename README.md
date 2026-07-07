@@ -16,20 +16,23 @@ A partir dessa reflexão, surgiu a proposta de criar uma plataforma viva. Utiliz
 
 O dashboard está estruturado em três vertentes operacionais complementares na mesma interface:
 
-1. **Visão Geral (Interação):**
+1. **Visão Geral (Exploração Cartográfica):**
+   * **Enquadramento Inteligente:** O sistema lê a camada base e calcula automaticamente o centroide da bacia, centralizando o mapa de forma dinâmica.
    * **Múltiplas Camadas (Overlay):** Permite empilhar e cruzar visualmente diferentes planos de informação (Geologia, Geomorfologia, Pedologia, Vegetação, Drenagem, Municípios e Setores Censitários).
-   * **Controle Granular Estético:** Ajuste individual de transparência por camada e alternância entre renderização por **Cor Única** ou **Por Atributo**.
-   * **Basemaps Avançados:** Opções de alternância em tempo real entre mapas focados em topografia, satélite de alta resolução (Google Hybrid) e modos escuros/claros.
+   * **Controle Granular e Simbologia:** Ajuste individual de transparência, renderização por atributo com paletas de cores otimizadas e escolha de simbologia cartográfica precisa para pontos (Círculos, Losangos, Quadrados e Triângulos).
+   * **Basemaps Avançados:** Alternância em tempo real entre topografia (Curvas de Nível), satélite de alta resolução (Google Hybrid), Street Maps e modos escuro/claro.
 
-2. **Laboratório de Geoprocessamento (Clip & Join Dinâmico):**
-   * **Intersecção Espacial Centralizada:** Executa fatiamentos geométricos (Clip) de qualquer camada alvo usando um polígono de interesse (ou desenho livre) como máscara de recorte.
-   * **Recálculo de Geometria ao Vivo:** Recalcula automaticamente áreas (km²) ou contagens de pontos dentro do recorte.
-   * **Análise de Kernel (KDE):** Gera mapas de calor dinâmicos para pontos de ocorrência.
-   * **Painel Integrado para análises estatisticas e de dados:** Gráficos interativos (Rosca, Radar, Barras) sincronizados com o recorte, permitindo o cruzamento de variáveis e auditoria dos dados através da linha de "Total Geral".
+2. **Laboratório de Geoprocessamento (Análise de Dados):**
+   * **Filtro Avançado (SQL):** Construtor de equações lógicas que permite fatiar os dados brutos e filtrar categorias ou valores matemáticos *antes* de aplicar o recorte geográfico.
+   * **Intersecção Espacial Centralizada (Clip):** Executa fatiamentos geométricos de qualquer camada alvo usando o limite de um município ou um desenho vetorial livre feito pelo usuário como máscara de recorte.
+   * **Recálculo de Geometria ao Vivo:** Recalcula automaticamente a área (km²) de polígonos, extensão (km) de linhas ou contagens estatísticas de pontos contidos estritamente dentro do novo recorte.
+   * **Estatística:** Gráficos interativos (Rosca, Radar, Barras e Linhas) com agrupamento de múltiplas variáveis. Inclui auditoria de dados com linha de "Total Geral" e detecção de métricas para somatório numérico automático (ex: volume, população).
+   * **Exportação de Dados Auditados:** Download instantâneo da área analisada em formatos abertos (`GeoJSON`) ou proprietários consolidados (`Shapefile` / `.zip`).
+   * **Densidade de Kernel (KDE):** Gera mapa de calor para pontos de ocorrência (ex: afloramentos etc).
 
 3. **Atlas Cartográfico (Mapas de Layout):**
    * **Repositório de Alta Resolução:** Disponibiliza a coleção de mapas cartográficos temáticos elaborados durante a dissertação.
-   * **Download Direto:** Acesso aos layouts prontos para impressão ou inserção em relatórios oficiais, servindo como referência estática e normatizada que contrasta com a análise exploratória dinâmica.
+   * **Download Direto:** Acesso aos layouts prontos para impressão ou inserção em relatórios oficiais, servindo como referência estática e normatizada que contrasta com a análise exploratória dinâmica da plataforma.
 
 ## 🛠️ Tecnologias Utilizadas
 
@@ -52,8 +55,22 @@ Para o funcionamento do "radar automático de dados", mantenha a organização a
 ├── requirements.txt
 └── README.md
 
-## 🚀 Como executar o projeto localmente
+🚀 Como executar o projeto localmente
+Clone este repositório:
 
-1. Clone este repositório:
-```bash
+Bash
 git clone [https://github.com/HerickGIS/dossie-mapas-mestrado.git](https://github.com/HerickGIS/dossie-mapas-mestrado.git)
+Acesse a pasta do projeto:
+
+Bash
+cd dossie-mapas-mestrado
+Instale as bibliotecas necessárias:
+
+Bash
+pip install -r requirements.txt
+Execute a aplicação WebGIS:
+
+Bash
+streamlit run VSCODE/app.py
+
+Desenvolvido por Herick Santos | Mestre em Geografia (UERN) | Geógrafo & Analista GIS
