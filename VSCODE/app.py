@@ -527,7 +527,7 @@ st.sidebar.info("""
 **Autor:** Herick Santos  
 *Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*
 
-Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica.
+Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando análise de dados com Álgebra de Mapas e princípios da Ecodinâmica a partir do ArcGIS.
 
 ---
 💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)  
