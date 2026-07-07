@@ -211,44 +211,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
 # =====================================================================
 # MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Recorte, Join e Recálculo)
 # =====================================================================
-elif modo_analise == "2. Laboratório de Geoprocessamento":
-    st.sidebar.subheader("🎯 1. Camada de Estudo")
-    camada_alvo = st.sidebar.selectbox("O que será analisado/recortado?", list(mapas_encontrados.keys()), index=0)
-    gdf_alvo_bruto = carregar_mapa(str(mapas_encontrados[camada_alvo]))
-    col_alvo_selecionada = st.sidebar.selectbox("Escolha o atributo base da análise:", extrair_colunas_validas(gdf_alvo_bruto))
-    
-    st.sidebar.subheader("✂️ 2. Máscara de Recorte (Faca)")
-    camada_mascara = st.sidebar.selectbox("Qual camada fará o corte?", list(mapas_encontrados.keys()), index=1)
-    gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
-    col_mask_selecionada = st.sidebar.selectbox("Coluna do polígono de corte:", extrair_colunas_validas(gdf_mask_bruto))
-    
-    valores_recorte = sorted(gdf_mask_bruto[col_mask_selecionada].astype(str).unique())
-    valor_faca = st.sidebar.selectbox(f"Selecione o limite exato de {col_mask_selecionada}:", valores_recorte)
-
-    if st.sidebar.button("✂️ Executar Geoprocessamento Avançado", type="primary"):
-        with st.spinner("Realizando Intersecção Espacial..."):
-            try:
-                gdf_a = gdf_alvo_bruto.to_crs(epsg=31984)
-                gdf_m = gdf_mask_bruto.to_crs(epsg=31984)
-                
-                mascara_filtrada = gdf_m[gdf_m[col_mask_selecionada].astype(str) == str(valor_faca)][['geometry']]
-                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how="intersection")
-                
-                if gdf_cortado.empty:
-                    st.sidebar.error("Sem intersecção física nestas áreas.")
-                else:
-                    if gdf_cortado.geometry.type.isin(['Polygon', 'MultiPolygon']).any():
-                        gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.area / 10**6
-                        st.session_state["unidade_medida"] = "Área (km²)"
-                    else:
-                        gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.length / 1000
-                        st.session_state["unidade_medida"] = "Extensão (km)"
-                        
-                    st.session_state["gdf_processado"] = gdf_cortado
-                    st.session_state["coluna_analise"] = col_alvo_selecionada
-                    st.session_state["nome_camada_ativa"] = camada_alvo
-            except Exception as e:
-                st.sidebar.error(f"Erro no geoprocessamento: {e}")
+https://www.linkedin.com/in/herick-santos-msc-3900a61b8/
 
     # --- RENDERIZAÇÃO DO LABORATÓRIO ---
     if st.session_state["gdf_processado"] is not None:
