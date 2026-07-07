@@ -25,12 +25,12 @@ if "nome_camada_ativa" not in st.session_state: st.session_state["nome_camada_at
 if "buffer_geom" not in st.session_state: st.session_state["buffer_geom"] = None
 
 st.title("💧 WebGIS com Sistema de Inteligência Geográfica: Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo-RN")
-st.markdown("**Análise Espacial, Ecodinâmica e Geoprocessamento Dinâmico**")
+st.markdown("**Análise de Dados Espacial, Ecodinâmica e Geoprocessamento**")
 
 # =====================================================================
 # 2. RADAR DE ARQUIVOS (OTIMIZADO PARA AMBIENTE CLOUD)
 # =====================================================================
-# Mapeia dinamicamente os arquivos na pasta 'data', ignorando o sistema do servidor
+# Mapeia os arquivos na pasta 'data'
 BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent if BASE_DIR.name == "VSCODE" else BASE_DIR
 
@@ -95,7 +95,7 @@ def obter_coluna_real(gdf):
     return colunas_validas[0] if colunas_validas else None
 
 def adicionar_elementos_cartograficos(mapa_folium):
-    """Adiciona Padronização Visual: Basemaps, Norte, Escala e Coordenadas do Mouse."""
+    """Adiciona Padronização Visual: Basemaps, Escala e Coordenadas do Mouse."""
     # Adição de Basemaps padronizados (Visão Satélite, Escuro, Claro e Arruamento)
     folium.TileLayer('CartoDB positron', name='Claro (Positron)', control=True).add_to(mapa_folium)
     folium.TileLayer('CartoDB dark_matter', name='Escuro (Dark Matter)', control=True).add_to(mapa_folium)
@@ -112,7 +112,7 @@ def adicionar_elementos_cartograficos(mapa_folium):
 st.sidebar.header("⚙️ Configurações da Análise")
 modo_analise = st.sidebar.radio(
     "Escolha o Modo de Navegação:", 
-    ["1. Visão Geral (StoryMap)", "2. Laboratório de Geoprocessamento", "3. Atlas Cartográfico (Imagens)"]
+    ["1. Visão Geral ", "2. Laboratório de Geoprocessamento", "3. Atlas Cartográfico (Imagens)"]
 )
 st.sidebar.markdown("---")
 
@@ -126,10 +126,10 @@ if modo_analise == "1. Visão Geral (StoryMap)":
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             st.markdown("**Vulnerabilidade Natural (VN):**")
-            st.latex(r"VN = \frac{\text{Geomorfo} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso/Cobertura}}{5}")
+            st.latex(r"VN = \frac{\text{Geomorfologia} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso e Cobertura da Terra}}{5}")
         with col_m2:
             st.markdown("**Vulnerabilidade Ambiental (VA):**")
-            st.latex(r"VA = 0.2[\text{Geomorfo}] + 0.1[\text{Geologia}] + 0.1[\text{Pedologia}] + 0.1[\text{Vegetação}] + 0.5[\text{Uso/Cobertura}]")
+            st.latex(r"VA = 0.2x[\text{Geomorfologia}] + 0.1x[\text{Geologia}] + 0.1x[\text{Pedologia}] + 0.1x[\text{Vegetação}] + 0.5x[\text{Uso e Cobertura da Terra}]")
 
     st.markdown("---")
     
@@ -236,11 +236,9 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
     # O guia retorna atualizado para manter a fluidez de uso
     with st.expander("💡 Guia de Métodos e Álgebra Espacial (Dicas Técnicas)", expanded=False):
         st.markdown("""
-        * **Intersecção (Spatial Join Restrito):** Isola a tabela de atributos e as feições geográficas rigorosamente dentro do perímetro de corte.
+        * **Intersecção (Spatial Join Restrito):** Isola a tabela de atributos e as feições geográficas rigorosamente dentro do perímetro de corte e recalcula a análise com base no recorte.
         * **Buffer de Zona de Amortecimento:** Adiciona um raio ao redor da faca de recorte. Útil para avaliar APP ou impactos marginais.
         * **Densidade de Kernel (KDE):** Gera mapa de calor para pontos de ocorrência (Ex: Afloramentos).
-        * **Krigagem (Informação):** A Krigagem é uma interpolação complexa que cria superfícies (Raster) contínuas a partir de *Valores Z* (chuva, cota). Por ser um processo matemático preditivo denso, o WebGIS foca na visualização estatística Vetorial (Kernel e KDE). Para modelos Raster 3D, exporte o dado e utilize rotinas de `pykrige` no QGIS ou ArcGIS.
-        """)
 
     st.sidebar.subheader("🎯 1. Camada de Estudo")
     camada_alvo = st.sidebar.selectbox("O que será analisado/recortado?", list(mapas_encontrados.keys()), index=0)
@@ -490,7 +488,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
 # =====================================================================
 elif modo_analise == "3. Atlas Cartográfico (Imagens)":
     st.header("🗺️ Atlas Cartográfico (Mapas de Layout)")
-    st.markdown("Visualize ou faça o download dos mapas estáticos em alta resolução produzidos para a pesquisa.")
+    st.markdown("Visualize ou faça o download dos mapas em alta resolução produzidos para a pesquisa.")
     st.markdown("---")
 
     if not mapas_estaticos:
@@ -506,9 +504,9 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
             st.write("") 
             st.write("")
             with open(caminho_imagem, "rb") as file:
-                tipo_mime = "image/png" if caminho_imagem.suffix.lower() == '.png' else "image/jpeg"
+                tipo_mime = "image/png" if caminho_.suffix.lower() == '.png' else "image/jpeg"
                 st.download_button(
-                    label="📥 Baixar Imagem em Alta",
+                    label="📥 Baixar Imagem",
                     data=file,
                     file_name=caminho_imagem.name,
                     mime=tipo_mime,
@@ -524,10 +522,10 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎓 Sobre a Pesquisa")
 st.sidebar.info("""
-**Autor:** Herick Santos  
-*Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*
+**Autor:** Herick Daniel Carvalho dos Santos  
+*Graduado, Laureado e Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*
 
-Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica.
+Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica a partir do ArcGIS.
 
 ---
 💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)  
