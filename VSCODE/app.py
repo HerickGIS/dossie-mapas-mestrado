@@ -1,6 +1,7 @@
 import streamlit as st
 import geopandas as gpd
 import folium
+from folium.plugins import HeatMap, Draw
 from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
@@ -215,7 +216,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
                 st.dataframe(tabelas_brutas[nome], use_container_width=True, hide_index=True)
 
 # =====================================================================
-# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Ajustado com Seletor)
+# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Intersect, KDE e Draw)
 # =====================================================================
 elif modo_analise == "2. Laboratório de Geoprocessamento":
     st.sidebar.subheader("🎯 1. Camada de Estudo")
@@ -228,45 +229,66 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
     if cruzar_segundo:
         col_alvo_secundada = st.sidebar.selectbox("Escolha o segundo atributo para correlação:", [c for c in extrair_colunas_validas(gdf_alvo_bruto) if c != col_alvo_selecionada])
 
-    st.sidebar.subheader("✂️ 2. Máscara de Recorte e Operação")
-    camada_mascara = st.sidebar.selectbox("Qual camada fará o corte?", list(mapas_encontrados.keys()), index=1)
-    gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
-    col_mask_selecionada = st.sidebar.selectbox("Coluna do polígono de corte:", extrair_colunas_validas(gdf_mask_bruto))
+    st.sidebar.subheader("✂️ 2. Máscara de Recorte e Buffer")
+    origem_mascara = st.sidebar.radio("Como deseja definir a área de recorte?", ["📂 Usar Camada do Banco de Dados", "🖍️ Desenhar Área Personalizada"])
     
-    valores_recorte = sorted(gdf_mask_bruto[col_mask_selecionada].astype(str).unique())
-    valor_faca = st.sidebar.selectbox(f"Selecione o limite exato de {col_mask_selecionada}:", valores_recorte)
-
-    # NOVO CONTROLE: Permite alternar dinamicamente entre as ferramentas de álgebra topológica
-    tipo_operacao = st.sidebar.selectbox(
-        "Selecione o Algoritmo Espacial:",
-        ["Intersecção (Strict Intersect/Clip)", "União Total (Preservar Não-Relacionados/Join)"],
-        help="A intersecção fatiará os polígonos estritamente no limite. A união trará os dados cruzados mantendo as áreas externas íntegras."
+    buffer_metros = st.sidebar.number_input(
+        "Adicionar Buffer à Máscara (metros):", 
+        min_value=0, value=0, step=100, 
+        help="Expande a área de recorte. Ideal para analisar o entorno de feições, como criar recortes de Áreas de Preservação Permanente (APP) ao redor de rios."
     )
-    op_gpd = "intersection" if "Intersecção" in tipo_operacao else "union"
 
-    if st.sidebar.button("✂️ Executar Geoprocessamento Avançado", type="primary"):
-        with st.spinner("Realizando Processamento Vetorial e Integração Tabular..."):
+    if origem_mascara == "📂 Usar Camada do Banco de Dados":
+        camada_mascara = st.sidebar.selectbox("Qual camada fará o corte?", list(mapas_encontrados.keys()), index=1)
+        gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
+        col_mask_selecionada = st.sidebar.selectbox("Coluna delimitadora de corte:", extrair_colunas_validas(gdf_mask_bruto))
+        valores_recorte = sorted(gdf_mask_bruto[col_mask_selecionada].astype(str).unique())
+        valor_faca = st.sidebar.selectbox(f"Selecione o limite exato de {col_mask_selecionada}:", valores_recorte)
+    
+    draw_data = None
+    # Se optou por desenhar, exibe o mapa de desenho ANTES do processamento
+    if origem_mascara == "🖍️ Desenhar Área Personalizada":
+        st.markdown("### 🖍️ Ferramenta de Delimitação Customizada")
+        st.info("Utilize as ferramentas à esquerda do mapa (Quadrado, Polígono ou Círculo) para desenhar sua área de interesse. Após o desenho, clique em 'Executar Geoprocessamento' na barra lateral.")
+        m_draw = folium.Map(location=[-5.6, -37.6], zoom_start=9)
+        folium.TileLayer('CartoDB positron').add_to(m_draw)
+        Draw(export=False).add_to(m_draw)
+        draw_res = st_folium(m_draw, height=450, key="draw_tools", return_on_hover=False)
+        if draw_res and draw_res.get("all_drawings"):
+            draw_data = draw_res["all_drawings"]
+
+    if st.sidebar.button("⚙️ Executar Geoprocessamento", type="primary"):
+        with st.spinner("Realizando Álgebra Espacial (Spatial Join Restrito)..."):
             try:
                 gdf_a = gdf_alvo_bruto.to_crs(epsg=31984)
-                gdf_m = gdf_mask_bruto.to_crs(epsg=31984)
                 
-                mascara_filtrada = gdf_m[gdf_m[col_mask_selecionada].astype(str) == str(valor_faca)][['geometry', col_mask_selecionada]]
-                
-                # Executa a álgebra dinâmica com base no selectbox
-                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how=op_gpd)
-                
-                if op_gpd == "union":
-                    gdf_cortado[col_mask_selecionada] = gdf_cortado[col_mask_selecionada].fillna("FORA DA ÁREA DE RECORTE")
+                # Definição da Geometria da Faca de Recorte
+                if origem_mascara == "📂 Usar Camada do Banco de Dados":
+                    gdf_m = gdf_mask_bruto.to_crs(epsg=31984)
+                    mascara_filtrada = gdf_m[gdf_m[col_mask_selecionada].astype(str) == str(valor_faca)][['geometry', col_mask_selecionada]]
+                else:
+                    if not draw_data:
+                        st.sidebar.error("Você precisa desenhar uma área no mapa principal primeiro!")
+                        st.stop()
+                    else:
+                        mascara_filtrada = gpd.GeoDataFrame.from_features(draw_data, crs="EPSG:4326").to_crs(epsg=31984)
+
+                # Aplicação de Buffer Dinâmico
+                if buffer_metros > 0:
+                    mascara_filtrada.geometry = mascara_filtrada.geometry.buffer(buffer_metros)
+
+                # Operação Estrita de Join/Intersect
+                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how="intersection")
                 
                 if gdf_cortado.empty:
-                    st.sidebar.error("Sem correspondência física ou geométrica na área selecionada.")
+                    st.sidebar.error("Sem intersecção física nestas áreas.")
                 else:
                     if gdf_cortado.geometry.type.isin(['Polygon', 'MultiPolygon']).any():
                         gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.area / 10**6
                         st.session_state["unidade_medida"] = "Área (km²)"
                     else:
                         gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.length / 1000
-                        st.session_state["unidade_medida"] = "Extensão (km)"
+                        st.session_state["unidade_medida"] = "Extensão/Quantidade (km / un)"
                         
                     st.session_state["gdf_processado"] = gdf_cortado
                     st.session_state["coluna_analise"] = col_alvo_selecionada
@@ -275,15 +297,15 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             except Exception as e:
                 st.sidebar.error(f"Erro no geoprocessamento: {e}")
 
-    # --- RENDERIZAÇÃO DO LABORATÓRIO ---
+    # --- RENDERIZAÇÃO DO RESULTADO ---
     if st.session_state["gdf_processado"] is not None:
+        st.markdown("---")
         gdf_trabalho = st.session_state["gdf_processado"].copy()
         coluna_foco = st.session_state["coluna_analise"]
         coluna_sec = st.session_state["coluna_analise_sec"]
         camada_nome = st.session_state["nome_camada_ativa"]
         und = st.session_state["unidade_medida"]
 
-        # Blindagem contra sufixos automáticos do GeoPandas
         if coluna_foco not in gdf_trabalho.columns:
             if f"{coluna_foco}_1" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_1"
             elif f"{coluna_foco}_2" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_2"
@@ -296,9 +318,8 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         if coluna_sec:
             gdf_trabalho[coluna_sec] = gdf_trabalho[coluna_sec].fillna("SEM DADO").astype(str).str.upper().str.strip()
 
-        st.subheader("Painel de Resultados: Intersecção e Recálculo Completo")
+        st.subheader("Painel de Resultados: Intersecção (Join Estrito)")
         
-        # Sincronização Estrita de Cores: Gerada de forma estática antes dos recortes e filtros
         paleta_mestra = gerar_paleta(gdf_trabalho[coluna_foco], camada_nome)
         
         controle_col1, controle_col2 = st.columns([1, 1])
@@ -309,13 +330,20 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             filtro_usuario = st.multiselect(
                 "🔍 Filtrar Resultados da Análise? (Limpe para ver tudo)", 
                 options=opcoes_unicas,
-                help="Selecione atributos específicos para isolar e recalcular as estatísticas instantaneamente."
+                help="Selecione atributos para isolar e recalcular estatísticas na área cortada."
             )
         
         if filtro_usuario:
             gdf_trabalho = gdf_trabalho[gdf_trabalho[coluna_foco].isin(filtro_usuario)]
+
+        # Variáveis e Estatísticas
+        is_points_layer = gdf_trabalho.geometry.type.isin(['Point', 'MultiPoint']).any()
         
-        # Agrupamentos Estatísticos
+        if is_points_layer:
+            st.session_state["unidade_medida"] = "Quantidade (Pontos)"
+            und = st.session_state["unidade_medida"]
+            gdf_trabalho['Geometria_Calc'] = 1
+
         if coluna_sec:
             group_cols = [coluna_foco, coluna_sec]
             resumo_df = gdf_trabalho.groupby(group_cols)['Geometria_Calc'].sum().reset_index()
@@ -326,40 +354,23 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         total_calc = resumo_df['Geometria_Calc'].sum()
         resumo_df['%'] = (resumo_df['Geometria_Calc'] / total_calc) * 100
         resumo_df = resumo_df.sort_values(by='Geometria_Calc', ascending=False)
-        resumo_df['Rotulo'] = resumo_df['Geometria_Calc'].round(2).astype(str) + f" {und.split(' ')[1]} (" + resumo_df['%'].round(1).astype(str) + "%)"
+        resumo_df['Rotulo'] = resumo_df['Geometria_Calc'].round(2).astype(str) + f" {und.split(' ')[0]} (" + resumo_df['%'].round(1).astype(str) + "%)"
 
         col_mapa_lab, col_grafico_lab = st.columns([6, 4])
         
         with col_grafico_lab:
-            if "Rosca" in tipo_grafico:
-                fig = px.pie(resumo_df, values='Geometria_Calc', names=coluna_foco, hole=0.4, color=coluna_foco, color_discrete_map=paleta_mestra)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-            elif "Pizza" in tipo_grafico:
-                fig = px.pie(resumo_df, values='Geometria_Calc', names=coluna_foco, color=coluna_foco, color_discrete_map=paleta_mestra)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-            elif "Horizontais" in tipo_grafico:
-                fig = px.bar(resumo_df, x='Geometria_Calc', y=coluna_foco, color=coluna_sec if coluna_sec else coluna_foco, 
-                             color_discrete_map=None if coluna_sec else paleta_mestra, barmode="group", text='Rotulo', orientation='h')
-                fig.update_traces(textposition='outside')
-            elif "Verticais" in tipo_grafico:
-                fig = px.bar(resumo_df, x=coluna_foco, y='Geometria_Calc', color=coluna_sec if coluna_sec else coluna_foco, 
-                             color_discrete_map=None if coluna_sec else paleta_mestra, barmode="group", text='Rotulo', orientation='v')
-                fig.update_traces(textposition='outside')
-            elif "Linhas" in tipo_grafico:
-                if coluna_sec:
-                    fig = px.line(resumo_df, x=coluna_foco, y='Geometria_Calc', color=coluna_sec, markers=True)
-                else:
-                    fig = px.line(resumo_df, x=coluna_foco, y='Geometria_Calc', markers=True)
-            elif "Radar" in tipo_grafico:
-                if coluna_sec:
-                    fig = px.line_polar(resumo_df, r='Geometria_Calc', theta=coluna_foco, color=coluna_sec, line_close=True)
-                else:
-                    fig = px.line_polar(resumo_df, r='Geometria_Calc', theta=coluna_foco, line_close=True)
+            if "Rosca" in tipo_grafico: fig = px.pie(resumo_df, values='Geometria_Calc', names=coluna_foco, hole=0.4, color=coluna_foco, color_discrete_map=paleta_mestra)
+            elif "Pizza" in tipo_grafico: fig = px.pie(resumo_df, values='Geometria_Calc', names=coluna_foco, color=coluna_foco, color_discrete_map=paleta_mestra)
+            elif "Horizontais" in tipo_grafico: fig = px.bar(resumo_df, x='Geometria_Calc', y=coluna_foco, color=coluna_sec if coluna_sec else coluna_foco, color_discrete_map=None if coluna_sec else paleta_mestra, barmode="group", text='Rotulo', orientation='h')
+            elif "Verticais" in tipo_grafico: fig = px.bar(resumo_df, x=coluna_foco, y='Geometria_Calc', color=coluna_sec if coluna_sec else coluna_foco, color_discrete_map=None if coluna_sec else paleta_mestra, barmode="group", text='Rotulo', orientation='v')
+            elif "Linhas" in tipo_grafico: fig = px.line(resumo_df, x=coluna_foco, y='Geometria_Calc', color=coluna_sec if coluna_sec else None, markers=True)
+            elif "Radar" in tipo_grafico: fig = px.line_polar(resumo_df, r='Geometria_Calc', theta=coluna_foco, color=coluna_sec if coluna_sec else None, line_close=True)
             
-            fig.update_layout(title=f"Cruzamento Métrico Integrado", margin=dict(t=50, b=0, l=0, r=0))
+            fig.update_layout(title=f"Estatística Recalculada", margin=dict(t=50, b=0, l=0, r=0))
+            if "Rosca" in tipo_grafico or "Pizza" in tipo_grafico: fig.update_traces(textposition='inside', textinfo='percent+label')
             st.plotly_chart(fig, use_container_width=True)
             
-            st.markdown(f"**Resumo Tabular Selecionado ({und.split(' ')[0]})**")
+            st.markdown(f"**Resumo Tabular Selecionado**")
             df_visual = resumo_df[group_cols + ['Geometria_Calc', '%']].copy()
             df_visual.columns = group_cols + [und, 'Proporção (%)']
             df_visual[und] = df_visual[und].round(3)
@@ -375,6 +386,18 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             folium.TileLayer('CartoDB positron', name='Mapa Base (Claro)', control=True).add_to(m_lab)
             folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite (Google Hybrid)', overlay=False, control=True).add_to(m_lab)
 
+            # Opção Dinâmica de Kernel (HeatMap) para pontos
+            if is_points_layer:
+                habilitar_kde = st.checkbox("🔥 Sobrepor Densidade de Kernel (HeatMap)")
+                if habilitar_kde:
+                    heat_data = []
+                    for geom in gdf_wgs84.geometry:
+                        if geom.type == 'Point':
+                            heat_data.append([geom.y, geom.x])
+                        elif geom.type == 'MultiPoint':
+                            heat_data.extend([[p.y, p.x] for p in geom.geoms])
+                    HeatMap(heat_data, radius=18, blur=15, name="Mapa de Calor (Kernel)").add_to(m_lab)
+
             def estilo_lab(feature):
                 geom_type = feature['geometry']['type']
                 valor = str(feature['properties'].get(coluna_foco, '')).strip().upper()
@@ -382,25 +405,24 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                 if geom_type in ['LineString', 'MultiLineString']:
                     return {'color': cor, 'weight': 4, 'opacity': 1}
                 elif geom_type in ['Point', 'MultiPoint']:
-                    return {'color': 'black', 'fillColor': cor, 'weight': 1, 'fillOpacity': 0.85, 'radius': 5}
+                    return {'color': 'black', 'fillColor': cor, 'weight': 1, 'fillOpacity': 0.9, 'radius': 6}
                 return {'fillColor': cor, 'color': '#222222', 'weight': 1, 'fillOpacity': 0.85}
 
-            # Pop-up Dinâmico reincorporado para consulta expedita de feições
             cols_popup = extrair_colunas_validas(gdf_wgs84)[:5]
 
-            fg_lab = folium.FeatureGroup(name=f"Análise Completa: {camada_nome}")
+            fg_lab = folium.FeatureGroup(name=f"Resultado: {camada_nome}")
             folium.GeoJson(
                 gdf_wgs84,
-                name="Resultado_Total",
+                name="Geometria_Cortada",
                 style_function=estilo_lab,
-                marker=folium.CircleMarker(radius=5),
+                marker=folium.CircleMarker(radius=6),
                 popup=folium.GeoJsonPopup(fields=cols_popup, aliases=[f"<b>{c}</b>" for c in cols_popup]) if cols_popup else None,
                 highlight_function=lambda x: {'weight': 3, 'color': 'white'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 6, 'color': 'red'}
             ).add_to(fg_lab)
             
             fg_lab.add_to(m_lab)
             folium.LayerControl(collapsed=False).add_to(m_lab)
-            st_folium(m_lab, use_container_width=True, height=500, key="mapa_lab", return_on_hover=False)
+            st_folium(m_lab, use_container_width=True, height=500, key="mapa_lab_result", return_on_hover=False)
 
         # --- SEÇÃO DE EXPORTAÇÃO ESPACIAL ---
         st.markdown("---")
@@ -410,7 +432,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         
         geojson_str = gdf_trabalho.to_crs(epsg=4326).to_json()
         exp_col1.download_button(
-            label="🌍 Baixar como arquivo GeoJSON",
+            label="🌍 Baixar GeoJSON",
             data=geojson_str,
             file_name=f"analise_{camada_nome.lower().replace(' ', '_')}.geojson",
             mime="application/json",
@@ -422,7 +444,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             gpd.io.file.fiona.drvsupport.supported_drivers['KML'] = 'rw'
             gdf_trabalho.to_crs(epsg=4326).to_file(kml_buffer, driver="KML")
             exp_col2.download_button(
-                label="🗺️ Baixar como arquivo KML",
+                label="🗺️ Baixar arquivo KML",
                 data=kml_buffer.getvalue(),
                 file_name=f"analise_{camada_nome.lower().replace(' ', '_')}.kml",
                 mime="application/vnd.google-earth.kml+xml",
@@ -441,7 +463,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                     for file_path in path_tmp.iterdir():
                         zf.write(file_path, arcname=file_path.name)
             exp_col3.download_button(
-                label="📦 Baixar ESRI Shapefile (.ZIP)",
+                label="📦 Baixar Shapefile (.ZIP)",
                 data=shp_buffer.getvalue(),
                 file_name=f"shapefile_{camada_nome.lower().replace(' ', '_')}.zip",
                 mime="application/zip",
@@ -450,10 +472,11 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         except:
             exp_col3.warning("Erro ao empacotar Shapefile.")
 
-        # AJUSTE DA TABELA COMPLETA: Sem exclusões, exibe 100% dos atributos estruturados originais das tabelas combinadas
-        with st.expander(f"📋 Tabela de Atributos Combinada Completa (Integridade Total)"):
-            st.caption("Esta tabela apresenta a totalidade dos dados tabulares cruzados de forma integral, sem remoção de colunas redundantes.")
+        with st.expander(f"📋 Tabela de Atributos Combinada Completa"):
+            st.caption("Atributos originais e recálculo da feição na área analisada.")
             df_final = gdf_trabalho.drop(columns=['geometry']).copy()
+            cols_limpas = [c for c in df_final.columns if not c.endswith('_1') and not c.endswith('_2')]
+            df_final = df_final[cols_limpas]
             cols_ordem = ['Geometria_Calc', coluna_foco] + [c for c in df_final.columns if c not in ['Geometria_Calc', coluna_foco]]
             st.dataframe(df_final[cols_ordem].rename(columns={'Geometria_Calc': und}), hide_index=True, use_container_width=True)
 
