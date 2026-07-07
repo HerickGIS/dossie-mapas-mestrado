@@ -519,13 +519,16 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
 # =====================================================================
 # RODAPÉ LATERAL: AUTOR E PESQUISA
 # =====================================================================
+# =====================================================================
+# RODAPÉ LATERAL: AUTOR E PESQUISA
+# =====================================================================
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎓 Sobre a Pesquisa")
 st.sidebar.info("""
-**Autor:** Herick Daniel Carvalho dos Santos  
-*Graduado, Laureado e Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*
+**Autor:** Herick Santos  
+*Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*
 
-Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica a partir do ArcGIS.
+Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando Álgebra de Mapas com Ecodinâmica.
 
 ---
 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)  
