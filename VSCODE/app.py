@@ -215,7 +215,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
                 st.dataframe(tabelas_brutas[nome], use_container_width=True, hide_index=True)
 
 # =====================================================================
-# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Recorte Rápido e BI)
+# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Ajustado com Seletor)
 # =====================================================================
 elif modo_analise == "2. Laboratório de Geoprocessamento":
     st.sidebar.subheader("🎯 1. Camada de Estudo")
@@ -228,7 +228,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
     if cruzar_segundo:
         col_alvo_secundada = st.sidebar.selectbox("Escolha o segundo atributo para correlação:", [c for c in extrair_colunas_validas(gdf_alvo_bruto) if c != col_alvo_selecionada])
 
-    st.sidebar.subheader("✂️ 2. Máscara de Recorte (Faca)")
+    st.sidebar.subheader("✂️ 2. Máscara de Recorte e Operação")
     camada_mascara = st.sidebar.selectbox("Qual camada fará o corte?", list(mapas_encontrados.keys()), index=1)
     gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
     col_mask_selecionada = st.sidebar.selectbox("Coluna do polígono de corte:", extrair_colunas_validas(gdf_mask_bruto))
@@ -236,17 +236,27 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
     valores_recorte = sorted(gdf_mask_bruto[col_mask_selecionada].astype(str).unique())
     valor_faca = st.sidebar.selectbox(f"Selecione o limite exato de {col_mask_selecionada}:", valores_recorte)
 
+    # NOVO CONTROLE: Permite alternar dinamicamente entre as ferramentas de álgebra topológica
+    tipo_operacao = st.sidebar.selectbox(
+        "Selecione o Algoritmo Espacial:",
+        ["Intersecção (Strict Intersect/Clip)", "União Total (Preservar Não-Relacionados/Join)"],
+        help="A intersecção fatiará os polígonos estritamente no limite. A união trará os dados cruzados mantendo as áreas externas íntegras."
+    )
+    op_gpd = "intersection" if "Intersecção" in tipo_operacao else "union"
+
     if st.sidebar.button("✂️ Executar Geoprocessamento Avançado", type="primary"):
-        with st.spinner("Realizando Intersecção Espacial de Alta Performance..."):
+        with st.spinner("Realizando Processamento Vetorial e Integração Tabular..."):
             try:
                 gdf_a = gdf_alvo_bruto.to_crs(epsg=31984)
                 gdf_m = gdf_mask_bruto.to_crs(epsg=31984)
                 
-                # Isola a máscara e executa a INTERSECÇÃO real (Rápido e limpo)
                 mascara_filtrada = gdf_m[gdf_m[col_mask_selecionada].astype(str) == str(valor_faca)][['geometry', col_mask_selecionada]]
                 
-                # Restabelecido para intersection: Corta exatamente o que interessa e mantém a tabela
-                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how="intersection")
+                # Executa a álgebra dinâmica com base no selectbox
+                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how=op_gpd)
+                
+                if op_gpd == "union":
+                    gdf_cortado[col_mask_selecionada] = gdf_cortado[col_mask_selecionada].fillna("FORA DA ÁREA DE RECORTE")
                 
                 if gdf_cortado.empty:
                     st.sidebar.error("Sem correspondência física ou geométrica na área selecionada.")
@@ -273,7 +283,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         camada_nome = st.session_state["nome_camada_ativa"]
         und = st.session_state["unidade_medida"]
 
-        # Blindagem contra renomeação de colunas pelo GeoPandas (_1, _2)
+        # Blindagem contra sufixos automáticos do GeoPandas
         if coluna_foco not in gdf_trabalho.columns:
             if f"{coluna_foco}_1" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_1"
             elif f"{coluna_foco}_2" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_2"
@@ -288,7 +298,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
 
         st.subheader("Painel de Resultados: Intersecção e Recálculo Completo")
         
-        # AQUI TRAVAMOS AS CORES: A paleta é gerada antes de qualquer filtro!
+        # Sincronização Estrita de Cores: Gerada de forma estática antes dos recortes e filtros
         paleta_mestra = gerar_paleta(gdf_trabalho[coluna_foco], camada_nome)
         
         controle_col1, controle_col2 = st.columns([1, 1])
@@ -302,7 +312,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                 help="Selecione atributos específicos para isolar e recalcular as estatísticas instantaneamente."
             )
         
-        # Aplicação do Filtro após travar as cores
         if filtro_usuario:
             gdf_trabalho = gdf_trabalho[gdf_trabalho[coluna_foco].isin(filtro_usuario)]
         
@@ -376,7 +385,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                     return {'color': 'black', 'fillColor': cor, 'weight': 1, 'fillOpacity': 0.85, 'radius': 5}
                 return {'fillColor': cor, 'color': '#222222', 'weight': 1, 'fillOpacity': 0.85}
 
-            # Pop-up Dinâmico no Laboratório (Pega as 5 primeiras colunas disponíveis)
+            # Pop-up Dinâmico reincorporado para consulta expedita de feições
             cols_popup = extrair_colunas_validas(gdf_wgs84)[:5]
 
             fg_lab = folium.FeatureGroup(name=f"Análise Completa: {camada_nome}")
@@ -393,14 +402,12 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             folium.LayerControl(collapsed=False).add_to(m_lab)
             st_folium(m_lab, use_container_width=True, height=500, key="mapa_lab", return_on_hover=False)
 
-        # --- SEÇÃO DE EXPORTAÇÃO ESPACIAL DE ALTA FIDELIDADE ---
+        # --- SEÇÃO DE EXPORTAÇÃO ESPACIAL ---
         st.markdown("---")
         st.subheader("📥 Exportação Avançada de Dados Geográficos")
-        st.caption("Baixe os dados espaciais resultantes para uso direto em softwares SIG (ArcGIS, QGIS ou Google Earth).")
         
         exp_col1, exp_col2, exp_col3 = st.columns(3)
         
-        # 1. Exportar GeoJSON
         geojson_str = gdf_trabalho.to_crs(epsg=4326).to_json()
         exp_col1.download_button(
             label="🌍 Baixar como arquivo GeoJSON",
@@ -410,7 +417,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             use_container_width=True
         )
         
-        # 2. Exportar KML
         try:
             kml_buffer = io.BytesIO()
             gpd.io.file.fiona.drvsupport.supported_drivers['KML'] = 'rw'
@@ -422,10 +428,9 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                 mime="application/vnd.google-earth.kml+xml",
                 use_container_width=True
             )
-        except Exception as e:
-            exp_col2.info("Formato KML disponível via conversão padrão no QGIS.")
+        except:
+            exp_col2.info("Formato KML disponível via conversão no QGIS.")
 
-        # 3. Exportar ESRI Shapefile (Zipped)
         try:
             shp_buffer = io.BytesIO()
             with zipfile.ZipFile(shp_buffer, 'w') as zf:
@@ -442,15 +447,13 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                 mime="application/zip",
                 use_container_width=True
             )
-        except Exception as e:
+        except:
             exp_col3.warning("Erro ao empacotar Shapefile.")
 
-        # Tabela completa de Atributos Originais preservados no Recorte
+        # AJUSTE DA TABELA COMPLETA: Sem exclusões, exibe 100% dos atributos estruturados originais das tabelas combinadas
         with st.expander(f"📋 Tabela de Atributos Combinada Completa (Integridade Total)"):
-            st.caption("Esta tabela apresenta os dados após a intersecção.")
+            st.caption("Esta tabela apresenta a totalidade dos dados tabulares cruzados de forma integral, sem remoção de colunas redundantes.")
             df_final = gdf_trabalho.drop(columns=['geometry']).copy()
-            cols_limpas = [c for c in df_final.columns if not c.endswith('_1') and not c.endswith('_2')]
-            df_final = df_final[cols_limpas]
             cols_ordem = ['Geometria_Calc', coluna_foco] + [c for c in df_final.columns if c not in ['Geometria_Calc', coluna_foco]]
             st.dataframe(df_final[cols_ordem].rename(columns={'Geometria_Calc': und}), hide_index=True, use_container_width=True)
 
