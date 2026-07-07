@@ -531,8 +531,8 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
 # =====================================================================
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎓 Sobre a Pesquisa")
-st.sidebar.markdown("**Autor:** Herick Santos")
-st.sidebar.markdown("*Graduado, Laureado e Mestre em Geografia pela UERN* | *Geógrafo & Analista GIS*")
+st.sidebar.markdown("**Desenvolvido por:** Herick Santos")
+st.sidebar.markdown("*Graduado, Laureado e Mestre em Geografia pela UERN* | *Geógrafo, Analista e Desenvolvedor GIS*")
 st.sidebar.markdown("Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando análise de dados com Álgebra de Mapas e princípios da Ecodinâmica.")
 st.sidebar.markdown("---")
 st.sidebar.markdown("💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)")
