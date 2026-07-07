@@ -126,7 +126,7 @@ st.sidebar.markdown("---")
 if modo_analise == "1. Visão Geral":
 
     with st.expander("📖 Metodologia da Pesquisa Resumida - A Álgebra de Mapas com a Ecodinâmica", expanded=False):
-        st.markdown("A pesquisa deu através das análises, mediante a aquisição do banco de dados geográficos, onde foi possível através dos softwares do ArcGIS e QGIS, usufruindo de suas ferramentas e recursos, a elaboração dos Mapas de Localização, Hipsometria e Hidrografia, Declividade, Pluviometria, Geologia, Geomorfologia, Pedologia, Cobertura da Vegetação, Uso e Cobertura da Terra, Vulnerabilidade Natural e Vulnerabilidade Ambiental. A partir de todos os dados, para o objetivo final da pesquisa, utilizou-se a modelagem de vulnerabilidade que integra os dados de todos os principais mapas com a dimensão do meio físico e a pressão antrópica por Álgebra de Mapas.)"
+        st.markdown("A pesquisa deu através das análises, mediante a aquisição do banco de dados geográficos, onde foi possível através dos softwares do ArcGIS e QGIS, usufruindo de suas ferramentas e recursos, a elaboração dos Mapas de Localização, Hipsometria e Hidrografia, Declividade, Pluviometria, Geologia, Geomorfologia, Pedologia, Cobertura da Vegetação, Uso e Cobertura da Terra, Vulnerabilidade Natural e Vulnerabilidade Ambiental. A partir de todos os dados, para o objetivo final da pesquisa, utilizou-se a modelagem de vulnerabilidade que integra os dados de todos os principais mapas com a dimensão do meio físico e a pressão antrópica por Álgebra de Mapas.")
         st.markdown("Para mais informações, consultar o documento da Dissertação no canto inferior esquerdo.")
         col_m1, col_m2 = st.columns(2)
         with col_m1:
