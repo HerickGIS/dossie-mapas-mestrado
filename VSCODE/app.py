@@ -235,7 +235,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
 elif modo_analise == "2. Laboratório de Geoprocessamento":
     # O guia retorna atualizado para manter a fluidez de uso
     with st.expander("💡 Guia de Métodos e Álgebra Espacial (Dicas Técnicas)", expanded=False):
-        st.markdown("""
+        st.markdown(""
         * **Intersecção (Spatial Join Restrito):** Isola a tabela de atributos e as feições geográficas rigorosamente dentro do perímetro de corte e recalcula a análise com base no recorte.
         * **Buffer de Zona de Amortecimento:** Adiciona um raio ao redor da faca de recorte. Útil para avaliar APP ou impactos marginais.
         * **Densidade de Kernel (KDE):** Gera mapa de calor para pontos de ocorrência (Ex: Afloramentos).
