@@ -45,7 +45,7 @@ for arquivo in sorted(todos_arquivos):
     nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas").replace("Ibge", "IBGE")
     mapas_encontrados[nome_legivel] = arquivo
 
-# Busca super-rápida de Imagens no repositório inteiro (O Atlas voltou!)
+# Busca super-rápida de Imagens no repositório inteiro
 todas_imagens = []
 for ext in ['*.png', '*.jpg', '*.jpeg', '*.PNG', '*.JPG', '*.JPEG']:
     todas_imagens.extend([f for f in REPO_DIR.rglob(ext) if 'venv' not in f.parts and '.git' not in f.parts])
@@ -57,12 +57,14 @@ def carregar_mapa(caminho): return gpd.read_file(caminho)
 
 @st.cache_data(show_spinner=False)
 def obter_centroide_bacia(caminho_bacia):
+    """Calcula o centroide da bacia para centralizar todos os mapas automaticamente."""
     try:
         gdf = gpd.read_file(caminho_bacia).to_crs(epsg=4326)
         return [gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()]
     except:
-        return [-5.6, -37.6]
+        return [-5.6, -37.6] # Coordenada de segurança
 
+# Busca a camada da bacia automaticamente e define a variável do centroide
 bacia_key = next((k for k in mapas_encontrados.keys() if "bacia" in k.lower() or "limite" in k.lower()), list(mapas_encontrados.keys())[0])
 centroide_mapa = obter_centroide_bacia(str(mapas_encontrados[bacia_key]))
 
