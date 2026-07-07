@@ -131,7 +131,7 @@ if modo_analise == "1. Visão Geral":
             st.latex(r"VN = \frac{\text{Geomorfologia} + \text{Geologia} + \text{Pedologia} + \text{Vegetação} + \text{Uso e Cobertura da Terra}}{5}")
         with col_m2:
             st.markdown("**Vulnerabilidade Ambiental (VA):**")
-            st.latex(r"VA = 0.2[\text{Geomorfologia}] + 0.1[\text{Geologia}] + 0.1[\text{Pedologia}] + 0.1[\text{Vegetação}] + 0.5[\text{Uso e Cobertura da Terra}]")
+            st.latex(r"VA = 0.2x[\text{Geomorfologia}] + 0.1x[\text{Geologia}] + 0.1x[\text{Pedologia}] + 0.1x[\text{Vegetação}] + 0.5x[\text{Uso e Cobertura da Terra}]")
     st.markdown("---")
 
     st.sidebar.subheader("🗺️ Controle de Camadas")
@@ -530,8 +530,8 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎓 Sobre a Pesquisa")
 st.sidebar.markdown("**Autor:** Herick Santos")
-st.sidebar.markdown("*Mestre em Geografia (UERN)* | *Geógrafo & Analista GIS*")
+st.sidebar.markdown("*Graduado, Laureado e Mestre em Geografia pela UERN* | *Geógrafo & Analista GIS*")
 st.sidebar.markdown("Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando análise de dados com Álgebra de Mapas e princípios da Ecodinâmica.")
 st.sidebar.markdown("---")
-st.sidebar.markdown("[Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)")
-st.sidebar.markdown("[Dissertação de Mestrado (UERN)](https://sucupira-legado.capes.gov.br/sucupira/public/consultas/coleta/trabalhoConclusao/viewTrabalhoConclusao.jsf?popup=true&id_trabalho=15178165)")
+st.sidebar.markdown("💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-msc-3900a61b8/)")
+st.sidebar.markdown("📚 [Dissertação de Mestrado (UERN)](https://sucupira-legado.capes.gov.br/sucupira/public/consultas/coleta/trabalhoConclusao/viewTrabalhoConclusao.jsf?popup=true&id_trabalho=15178165)")
