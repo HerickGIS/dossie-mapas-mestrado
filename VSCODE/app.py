@@ -106,9 +106,9 @@ def adicionar_elementos_cartograficos(mapa_folium):
     # Adição da Coordenada Geográfica dinâmica no ponteiro do mouse
     MousePosition(position='bottomright', separator=' | ', empty_string='Fora do Mapa', num_digits=5, prefix='Coordenada:').add_to(mapa_folium)
     
-    # Rosa dos Ventos (Norte Geográfico) inserida no canto superior direito
+    # Rosa dos Ventos (Norte Geográfico) inserida no canto superior
     url_norte = 'https://upload.wikimedia.org/wikipedia/commons/9/99/Compass_rose_simple.svg'
-    FloatImage(url_norte, bottom=65, right=25).add_to(mapa_folium) # Posicionamento relativo em CSS
+    FloatImage(url_norte, bottom=330, left=10).add_to(mapa_folium) # Posicionamento relativo em CSS
 
 # =====================================================================
 # 4. PAINEL LATERAL (CONTROLE GERAL)
