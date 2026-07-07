@@ -3,7 +3,6 @@ import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 import plotly.express as px
-import plotly.graph_objects as go
 from pathlib import Path
 import pandas as pd
 import io
@@ -68,7 +67,6 @@ cores_vulnerabilidade = {
 }
 
 def gerar_paleta(valores, nome_camada):
-    # Garante conversão para string para evitar o erro de ordenação (ex: Drenagem ANA)
     valores_higienizados = valores.astype(str).fillna("SEM DADO")
     valores_unicos = sorted(list(set(valores_higienizados)))
     if "vulnerabilidade" in nome_camada.lower():
@@ -98,9 +96,9 @@ modo_analise = st.sidebar.radio(
 st.sidebar.markdown("---")
 
 # =====================================================================
-# MODO 1: VISÃO GERAL (StoryMap Interativo)
+# MODO 1: VISÃO GERAL
 # =====================================================================
-if modo_analise == "1. Visão Geral (StoryMap)":
+if modo_analise == "1. Visão Geral":
     
     with st.expander("📖 Metodologia: Ecodinâmica de Tricart", expanded=False):
         st.markdown("A modelagem de vulnerabilidade integra a dimensão do meio físico e a pressão antrópica por Álgebra de Mapas.")
@@ -214,13 +212,12 @@ if modo_analise == "1. Visão Geral (StoryMap)":
 # =====================================================================
 # MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Recorte, Join Inclusivo e BI)
 # =====================================================================
-elif modo_analise == "2. Laboratório de Geoprocessamento":
+elif modo_analise == "2. Análise de Dados":
     st.sidebar.subheader("🎯 1. Camada de Estudo")
     camada_alvo = st.sidebar.selectbox("O que será analisado/recortado?", list(mapas_encontrados.keys()), index=0)
     gdf_alvo_bruto = carregar_mapa(str(mapas_encontrados[camada_alvo]))
     col_alvo_selecionada = st.sidebar.selectbox("Escolha o atributo base da análise:", extrair_colunas_validas(gdf_alvo_bruto))
     
-    # Cruzamento BI (Power BI Style): Permite selecionar uma segunda dimensão para análise combinada
     cruzar_segundo = st.sidebar.checkbox("🔗 Cruzar com 2ª Análise Atributiva (Estilo BI)", value=False)
     col_alvo_secundada = None
     if cruzar_segundo:
@@ -240,13 +237,9 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                 gdf_a = gdf_alvo_bruto.to_crs(epsg=31984)
                 gdf_m = gdf_mask_bruto.to_crs(epsg=31984)
                 
-                # Filtra o polígono da faca
                 mascara_filtrada = gdf_m[gdf_m[col_mask_selecionada].astype(str) == str(valor_faca)][['geometry', col_mask_selecionada]]
                 
-                # MUDANÇA: Utiliza o 'union' para preservar todos os registros espaciais e atributos originais completos
                 gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how="union")
-                
-                # Cria coluna identificadora para diferenciar o que está dentro/fora ou manter integridade
                 gdf_cortado[col_mask_selecionada] = gdf_cortado[col_mask_selecionada].fillna("FORA DA ÁREA DE RECORTE")
                 
                 if gdf_cortado.empty:
@@ -273,23 +266,34 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         coluna_sec = st.session_state["coluna_analise_sec"]
         camada_nome = st.session_state["nome_camada_ativa"]
         und = st.session_state["unidade_medida"]
+
+        # =======================================================
+        # BLINDAGEM DE COLUNAS (Evita KeyError se o overlay renomear algo com _1 ou _2)
+        # =======================================================
+        if coluna_foco not in gdf_trabalho.columns:
+            if f"{coluna_foco}_1" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_1"
+            elif f"{coluna_foco}_2" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_2"
+            
+        if coluna_sec and coluna_sec not in gdf_trabalho.columns:
+            if f"{coluna_sec}_1" in gdf_trabalho.columns: coluna_sec = f"{coluna_sec}_1"
+            elif f"{coluna_sec}_2" in gdf_trabalho.columns: coluna_sec = f"{coluna_sec}_2"
         
-        # Garante tratamento de strings limpas
-        gdf_trabalho[coluna_foco] = gdf_trabalho[coluna_foco].astype(str).str.upper().str.strip()
+        # Garante conversão limpa e segura (Evita TypeError de ordenação)
+        gdf_trabalho[coluna_foco] = gdf_trabalho[coluna_foco].fillna("SEM DADO").astype(str).str.upper().str.strip()
         if coluna_sec:
-            gdf_trabalho[coluna_sec] = gdf_trabalho[coluna_sec].astype(str).str.upper().str.strip()
+            gdf_trabalho[coluna_sec] = gdf_trabalho[coluna_sec].fillna("SEM DADO").astype(str).str.upper().str.strip()
 
         st.subheader("Painel de Resultados: Intersecção, União e Recálculo Completo")
         
-        # Painel de controle de gráficos e filtros rápidos interativos
         controle_col1, controle_col2 = st.columns([1, 1])
         with controle_col1:
-            # Opções expandidas de gráficos incluindo Linhas e Radar
             tipo_grafico = st.selectbox("📊 Formato do Gráfico:", ["Rosca (Donut)", "Pizza Clássica", "Barras Horizontais", "Barras Verticais", "Linhas de Tendência", "Radar Geográfico"])
         with controle_col2:
+            # Opções de filtro higienizadas e ordenadas corretamente
+            opcoes_unicas = sorted(list(gdf_trabalho[coluna_foco].unique()))
             filtro_usuario = st.multiselect(
                 "🔍 Filtrar Resultados da Análise? (Limpe para ver tudo)", 
-                options=sorted(gdf_trabalho[coluna_foco].unique()),
+                options=opcoes_unicas,
                 help="Selecione atributos específicos para isolar e recalcular as estatísticas instantaneamente."
             )
         
@@ -298,7 +302,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         
         paleta_mestra = gerar_paleta(gdf_trabalho[coluna_foco], camada_nome)
 
-        # Agrupamento e processamento estatístico tabular
         if coluna_sec:
             group_cols = [coluna_foco, coluna_sec]
             resumo_df = gdf_trabalho.groupby(group_cols)['Geometria_Calc'].sum().reset_index()
@@ -314,7 +317,6 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         col_mapa_lab, col_grafico_lab = st.columns([6, 4])
         
         with col_grafico_lab:
-            # Geração Dinâmica dos Gráficos com suporte Bi-Variado (Power BI Style)
             if "Rosca" in tipo_grafico:
                 fig = px.pie(resumo_df, values='Geometria_Calc', names=coluna_foco, hole=0.4, color=coluna_foco, color_discrete_map=paleta_mestra)
                 fig.update_traces(textposition='inside', textinfo='percent+label')
@@ -386,7 +388,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         # --- SEÇÃO DE EXPORTAÇÃO ESPACIAL DE ALTA FIDELIDADE ---
         st.markdown("---")
         st.subheader("📥 Exportação Avançada de Dados Geográficos")
-        st.caption("Baixe os dados espaciais resultantes recalcitrados para uso direto em softwares SIG (ArcGIS, QGIS ou Google Earth).")
+        st.caption("Baixe os dados espaciais resultantes para uso direto em softwares SIG (ArcGIS, QGIS ou Google Earth).")
         
         exp_col1, exp_col2, exp_col3 = st.columns(3)
         
@@ -426,7 +428,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                     for file_path in path_tmp.iterdir():
                         zf.write(file_path, arcname=file_path.name)
             exp_col3.download_button(
-                label="📦 Baixar como ESRI Shapefile (.ZIP)",
+                label="📦 Baixar ESRI Shapefile (.ZIP)",
                 data=shp_buffer.getvalue(),
                 file_name=f"shapefile_{camada_nome.lower().replace(' ', '_')}.zip",
                 mime="application/zip",
@@ -447,7 +449,7 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
 # =====================================================================
 # MODO 3: ATLAS CARTOGRÁFICO (Visualização de Imagens)
 # =====================================================================
-elif modo_analise == "3. Atlas Cartográfico (Imagens)":
+elif modo_analise == "3. Atlas Cartográfico (Imagens dos Mapas da Pesquisa)":
     st.header("🗺️ Atlas Cartográfico (Mapas de Layout)")
     st.markdown("Visualize ou faça o download dos mapas estáticos em alta resolução produzidos para a pesquisa.")
     st.markdown("---")
@@ -467,7 +469,7 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
             with open(caminho_imagem, "rb") as file:
                 tipo_mime = "image/png" if caminho_imagem.suffix.lower() == '.png' else "image/jpeg"
                 st.download_button(
-                    label="📥 Baixar Imagem em Alta",
+                    label="📥 Baixar Imagem",
                     data=file,
                     file_name=caminho_imagem.name,
                     mime=tipo_mime,
