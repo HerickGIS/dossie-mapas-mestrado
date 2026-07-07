@@ -194,8 +194,8 @@ if modo_analise == "1. Visão Geral (StoryMap)":
             gdf,
             name=f"Camada: {nome_camada}",
             style_function=estilo_geral,
-            marker=folium.CircleMarker(radius=5),
-            highlight_function=lambda x: {'weight': 3, 'color': 'yellow'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 5, 'color': 'red'},
+            marker=folium.CircleMarker(radius=3),
+            highlight_function=lambda x: {'weight': 3, 'color': 'yellow'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 3, 'color': 'red'},
             popup=folium.GeoJsonPopup(fields=colunas_popup, aliases=[f"<b>{c}</b>" for c in colunas_popup]) if colunas_popup else None
         ).add_to(fg)
         
