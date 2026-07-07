@@ -3,8 +3,11 @@ import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 import plotly.express as px
+import plotly.graph_objects as go
 from pathlib import Path
 import pandas as pd
+import io
+import zipfile
 
 # =====================================================================
 # 1. CONFIGURAÇÃO E ESTADO DA SESSÃO
@@ -15,6 +18,12 @@ if "gdf_processado" not in st.session_state:
     st.session_state["gdf_processado"] = None
 if "coluna_analise" not in st.session_state:
     st.session_state["coluna_analise"] = None
+if "coluna_analise_sec" not in st.session_state:
+    st.session_state["coluna_analise_sec"] = None
+if "unidade_medida" not in st.session_state:
+    st.session_state["unidade_medida"] = "Área (km²)"
+if "nome_camada_ativa" not in st.session_state:
+    st.session_state["nome_camada_ativa"] = ""
 
 st.title("💧 WebGIS com Sistema de Inteligência Geográfica: Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo-RN")
 st.markdown("**Análise Espacial, Ecodinâmica e Geoprocessamento Dinâmico**")
@@ -59,7 +68,9 @@ cores_vulnerabilidade = {
 }
 
 def gerar_paleta(valores, nome_camada):
-    valores_unicos = sorted(list(set(valores)))
+    # Garante conversão para string para evitar o erro de ordenação (ex: Drenagem ANA)
+    valores_higienizados = valores.astype(str).fillna("SEM DADO")
+    valores_unicos = sorted(list(set(valores_higienizados)))
     if "vulnerabilidade" in nome_camada.lower():
         return {str(v): cores_vulnerabilidade.get(str(v).strip().upper(), '#808080') for v in valores_unicos}
     
@@ -103,13 +114,11 @@ if modo_analise == "1. Visão Geral (StoryMap)":
 
     st.markdown("---")
     
-    # Define a Bacia de Delimitação como Camada Padrão
     bacia_key = next((k for k in mapas_encontrados.keys() if "bacia" in k.lower() or "limite" in k.lower()), list(mapas_encontrados.keys())[0])
     
     st.sidebar.subheader("🗺️ Controle de Camadas")
     camadas_alvo = st.sidebar.multiselect("Selecione os dados para visualizar:", list(mapas_encontrados.keys()), default=[bacia_key])
     
-    # Dicionário para armazenar as preferências visuais de cada camada
     estilos_camadas = {}
     
     for nome_camada in camadas_alvo:
@@ -150,18 +159,12 @@ if modo_analise == "1. Visão Geral (StoryMap)":
         
         if estilo["tipo_cor"] == "Por Atributo":
             coluna_cor = estilo["coluna"]
-         # ... (após o 'if estilo["tipo_cor"] == "Por Atributo":')
-
-        if estilo["tipo_cor"] == "Por Atributo":
-            coluna_cor = estilo["coluna"]
-            # CORREÇÃO: Forçamos a coluna para string antes de gerar a paleta
             valores_para_paleta = gdf[coluna_cor].astype(str).fillna("SEM DADO")
             paleta = gerar_paleta(valores_para_paleta, nome_camada)
         else:
             coluna_cor = None
             paleta = None
             
-        # Otimização do Pop-up (Apenas as 5 primeiras colunas para não poluir a tela)
         todas_colunas = extrair_colunas_validas(gdf)
         colunas_popup = todas_colunas[:5] 
         
@@ -178,7 +181,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
                 
             if geom_type in ['LineString', 'MultiLineString']:
                 return {'color': cor_final, 'weight': 3, 'opacity': op}
-            elif geom_type in ['Point', 'MultiPoint']: # Ponto simples em vez de alfinete
+            elif geom_type in ['Point', 'MultiPoint']:
                 return {'color': 'black', 'fillColor': cor_final, 'weight': 1, 'fillOpacity': op, 'radius': 5}
             else:
                 return {'fillColor': cor_final, 'color': '#222222', 'weight': 1, 'fillOpacity': op}
@@ -187,7 +190,7 @@ if modo_analise == "1. Visão Geral (StoryMap)":
             gdf,
             name=f"Camada: {nome_camada}",
             style_function=estilo_geral,
-            marker=folium.CircleMarker(radius=5), # Transforma os pontos nativos em círculos limpos
+            marker=folium.CircleMarker(radius=5),
             highlight_function=lambda x: {'weight': 3, 'color': 'yellow'} if x['geometry']['type'] not in ['LineString', 'MultiLineString'] else {'weight': 5, 'color': 'red'},
             popup=folium.GeoJsonPopup(fields=colunas_popup, aliases=[f"<b>{c}</b>" for c in colunas_popup]) if colunas_popup else None
         ).add_to(fg)
@@ -209,97 +212,85 @@ if modo_analise == "1. Visão Geral (StoryMap)":
                 st.dataframe(tabelas_brutas[nome], use_container_width=True, hide_index=True)
 
 # =====================================================================
-# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Aprimorado)
+# MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Recorte, Join Inclusivo e BI)
 # =====================================================================
 elif modo_analise == "2. Laboratório de Geoprocessamento":
     st.sidebar.subheader("🎯 1. Camada de Estudo")
-    camada_alvo = st.sidebar.selectbox("O que será analisado?", list(mapas_encontrados.keys()))
-    col_alvo_sel = st.sidebar.selectbox("Atributo para gráfico:", extrair_colunas_validas(carregar_mapa(str(mapas_encontrados[camada_alvo]))))
+    camada_alvo = st.sidebar.selectbox("O que será analisado/recortado?", list(mapas_encontrados.keys()), index=0)
+    gdf_alvo_bruto = carregar_mapa(str(mapas_encontrados[camada_alvo]))
+    col_alvo_selecionada = st.sidebar.selectbox("Escolha o atributo base da análise:", extrair_colunas_validas(gdf_alvo_bruto))
     
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("✂️ 2. Recorte e Comparação")
-    camada_mascara = st.sidebar.selectbox("Faca (Recorte):", list(mapas_encontrados.keys()))
+    # Cruzamento BI (Power BI Style): Permite selecionar uma segunda dimensão para análise combinada
+    cruzar_segundo = st.sidebar.checkbox("🔗 Cruzar com 2ª Análise Atributiva (Estilo BI)", value=False)
+    col_alvo_secundada = None
+    if cruzar_segundo:
+        col_alvo_secundada = st.sidebar.selectbox("Escolha o segundo atributo para correlação:", [c for c in extrair_colunas_validas(gdf_alvo_bruto) if c != col_alvo_selecionada])
+
+    st.sidebar.subheader("✂️ 2. Máscara de Recorte (Faca)")
+    camada_mascara = st.sidebar.selectbox("Qual camada fará o corte?", list(mapas_encontrados.keys()), index=1)
+    gdf_mask_bruto = carregar_mapa(str(mapas_encontrados[camada_mascara]))
+    col_mask_selecionada = st.sidebar.selectbox("Coluna do polígono de corte:", extrair_colunas_validas(gdf_mask_bruto))
     
-    if st.sidebar.button("⚙️ Processar Análise"):
-        # Lógica de Overlay Union para não perder dados que não deram join
-        gdf_a = carregar_mapa(str(mapas_encontrados[camada_alvo])).to_crs(epsg=31984)
-        gdf_m = carregar_mapa(str(mapas_encontrados[camada_mascara])).to_crs(epsg=31984)
-        
-        # Overlay Union mantém os atributos originais que não intersectaram
-        gdf_processado = gpd.overlay(gdf_a, gdf_m, how="union") 
-        gdf_processado['Area_km2'] = gdf_processado.geometry.area / 10**6
-        st.session_state["gdf_processado"] = gdf_processado
-        st.session_state["coluna_analise"] = col_alvo_sel
+    valores_recorte = sorted(gdf_mask_bruto[col_mask_selecionada].astype(str).unique())
+    valor_faca = st.sidebar.selectbox(f"Selecione o limite exato de {col_mask_selecionada}:", valores_recorte)
 
-   # --- Comparativo de Gráficos ---
-    if st.session_state["gdf_processado"] is not None:
-        gdf_res = st.session_state["gdf_processado"]
-        col_escolhida = st.session_state["coluna_analise"]
-
-        # VERIFICAÇÃO DE SEGURANÇA
-        if col_escolhida not in gdf_res.columns:
-            st.warning(f"A coluna '{col_escolhida}' não foi encontrada após o geoprocessamento.")
-            st.write("Colunas disponíveis no arquivo resultante:", gdf_res.columns.tolist())
-            # Tenta sugerir a coluna que parece mais correta
-            sugestao = st.selectbox("Selecione a coluna correta para o gráfico:", gdf_res.columns.tolist())
-            col_escolhida = sugestao
-            st.session_state["coluna_analise"] = sugestao
-
-        # Agora o groupby roda com segurança
-        resumo = gdf_res.groupby(col_escolhida, observed=True)['Area_km2'].sum().reset_index()
-        
-        # ... (seu restante do código de gráficos abaixo)
-        # Opções de visualização
-        tipo_g = st.selectbox("Formato:", ["Rosca", "Barras Verticais", "Linhas", "Radar"])
-        
-        # Lógica de Exportação
-        st.subheader("📥 Exportar Dados")
-        col_exp1, col_exp2 = st.columns(2)
-        
-        # Export para GeoJSON
-        geojson_data = gdf_res.to_json()
-        col_exp1.download_button("Baixar como GeoJSON", data=geojson_data, file_name="analise.geojson", mime="application/json")
-        
-        # Export para KML (usando driver de arquivo do fiona/gpd)
-        if col_exp2.button("Baixar como KML/Shapefile"):
-            gdf_res.to_file("exportacao.kml", driver="KML")
-            with open("exportacao.kml", "rb") as f:
-                col_exp2.download_button("Clique aqui para baixar o arquivo", f, file_name="analise.kml")
-
-        # Gráficos Dinâmicos
-        resumo = gdf_res.groupby(st.session_state["coluna_analise"])['Area_km2'].sum().reset_index()
-        
-        if tipo_g == "Radar":
-            fig = px.line_polar(resumo, r='Area_km2', theta=st.session_state["coluna_analise"], line_close=True)
-        elif tipo_g == "Linhas":
-            fig = px.line(resumo, x=st.session_state["coluna_analise"], y='Area_km2', markers=True)
-        else:
-            fig = px.bar(resumo, x=st.session_state["coluna_analise"], y='Area_km2')
-            
-        st.plotly_chart(fig, use_container_width=True)
-        
-        st.dataframe(gdf_res.drop(columns=['geometry']), use_container_width=True)
+    if st.sidebar.button("✂️ Executar Geoprocessamento Avançado", type="primary"):
+        with st.spinner("Realizando Intersecção Espacial e Integração Tabular Total..."):
+            try:
+                gdf_a = gdf_alvo_bruto.to_crs(epsg=31984)
+                gdf_m = gdf_mask_bruto.to_crs(epsg=31984)
+                
+                # Filtra o polígono da faca
+                mascara_filtrada = gdf_m[gdf_m[col_mask_selecionada].astype(str) == str(valor_faca)][['geometry', col_mask_selecionada]]
+                
+                # MUDANÇA: Utiliza o 'union' para preservar todos os registros espaciais e atributos originais completos
+                gdf_cortado = gpd.overlay(gdf_a, mascara_filtrada, how="union")
+                
+                # Cria coluna identificadora para diferenciar o que está dentro/fora ou manter integridade
+                gdf_cortado[col_mask_selecionada] = gdf_cortado[col_mask_selecionada].fillna("FORA DA ÁREA DE RECORTE")
+                
+                if gdf_cortado.empty:
+                    st.sidebar.error("Sem correspondência física ou geométrica.")
+                else:
+                    if gdf_cortado.geometry.type.isin(['Polygon', 'MultiPolygon']).any():
+                        gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.area / 10**6
+                        st.session_state["unidade_medida"] = "Área (km²)"
+                    else:
+                        gdf_cortado['Geometria_Calc'] = gdf_cortado.geometry.length / 1000
+                        st.session_state["unidade_medida"] = "Extensão (km)"
+                        
+                    st.session_state["gdf_processado"] = gdf_cortado
+                    st.session_state["coluna_analise"] = col_alvo_selecionada
+                    st.session_state["coluna_analise_sec"] = col_alvo_secundada if cruzar_segundo else None
+                    st.session_state["nome_camada_ativa"] = camada_alvo
+            except Exception as e:
+                st.sidebar.error(f"Erro no geoprocessamento: {e}")
 
     # --- RENDERIZAÇÃO DO LABORATÓRIO ---
     if st.session_state["gdf_processado"] is not None:
         gdf_trabalho = st.session_state["gdf_processado"].copy()
         coluna_foco = st.session_state["coluna_analise"]
+        coluna_sec = st.session_state["coluna_analise_sec"]
         camada_nome = st.session_state["nome_camada_ativa"]
         und = st.session_state["unidade_medida"]
         
+        # Garante tratamento de strings limpas
         gdf_trabalho[coluna_foco] = gdf_trabalho[coluna_foco].astype(str).str.upper().str.strip()
+        if coluna_sec:
+            gdf_trabalho[coluna_sec] = gdf_trabalho[coluna_sec].astype(str).str.upper().str.strip()
 
-        st.subheader("Painel de Resultados: Intersecção e Recálculo")
+        st.subheader("Painel de Resultados: Intersecção, União e Recálculo Completo")
         
+        # Painel de controle de gráficos e filtros rápidos interativos
         controle_col1, controle_col2 = st.columns([1, 1])
         with controle_col1:
-            # Gráfico de Barras Verticais Adicionado!
-            tipo_grafico = st.selectbox("📊 Formato do Gráfico:", ["Rosca (Donut)", "Pizza Clássica", "Barras Horizontais", "Barras Verticais"])
+            # Opções expandidas de gráficos incluindo Linhas e Radar
+            tipo_grafico = st.selectbox("📊 Formato do Gráfico:", ["Rosca (Donut)", "Pizza Clássica", "Barras Horizontais", "Barras Verticais", "Linhas de Tendência", "Radar Geográfico"])
         with controle_col2:
             filtro_usuario = st.multiselect(
-                "🔍 Filtrar Resultados? (Limpe para ver tudo)", 
+                "🔍 Filtrar Resultados da Análise? (Limpe para ver tudo)", 
                 options=sorted(gdf_trabalho[coluna_foco].unique()),
-                help="Selecione atributos específicos para recalcular os gráficos e isolá-los no mapa."
+                help="Selecione atributos específicos para isolar e recalcular as estatísticas instantaneamente."
             )
         
         if filtro_usuario:
@@ -307,16 +298,23 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
         
         paleta_mestra = gerar_paleta(gdf_trabalho[coluna_foco], camada_nome)
 
-        resumo_df = gdf_trabalho.groupby(coluna_foco)['Geometria_Calc'].sum().reset_index()
+        # Agrupamento e processamento estatístico tabular
+        if coluna_sec:
+            group_cols = [coluna_foco, coluna_sec]
+            resumo_df = gdf_trabalho.groupby(group_cols)['Geometria_Calc'].sum().reset_index()
+        else:
+            group_cols = [coluna_foco]
+            resumo_df = gdf_trabalho.groupby(group_cols)['Geometria_Calc'].sum().reset_index()
+            
         total_calc = resumo_df['Geometria_Calc'].sum()
         resumo_df['%'] = (resumo_df['Geometria_Calc'] / total_calc) * 100
         resumo_df = resumo_df.sort_values(by='Geometria_Calc', ascending=False)
-        
         resumo_df['Rotulo'] = resumo_df['Geometria_Calc'].round(2).astype(str) + f" {und.split(' ')[1]} (" + resumo_df['%'].round(1).astype(str) + "%)"
 
         col_mapa_lab, col_grafico_lab = st.columns([6, 4])
         
         with col_grafico_lab:
+            # Geração Dinâmica dos Gráficos com suporte Bi-Variado (Power BI Style)
             if "Rosca" in tipo_grafico:
                 fig = px.pie(resumo_df, values='Geometria_Calc', names=coluna_foco, hole=0.4, color=coluna_foco, color_discrete_map=paleta_mestra)
                 fig.update_traces(textposition='inside', textinfo='percent+label')
@@ -324,21 +322,30 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
                 fig = px.pie(resumo_df, values='Geometria_Calc', names=coluna_foco, color=coluna_foco, color_discrete_map=paleta_mestra)
                 fig.update_traces(textposition='inside', textinfo='percent+label')
             elif "Horizontais" in tipo_grafico:
-                fig = px.bar(resumo_df, x='Geometria_Calc', y=coluna_foco, color=coluna_foco, color_discrete_map=paleta_mestra, text='Rotulo', orientation='h')
+                fig = px.bar(resumo_df, x='Geometria_Calc', y=coluna_foco, color=coluna_sec if coluna_sec else coluna_foco, 
+                             color_discrete_map=None if coluna_sec else paleta_mestra, barmode="group", text='Rotulo', orientation='h')
                 fig.update_traces(textposition='outside')
-                fig.update_layout(showlegend=False, xaxis_title=und, yaxis_title="")
             elif "Verticais" in tipo_grafico:
-                fig = px.bar(resumo_df, x=coluna_foco, y='Geometria_Calc', color=coluna_foco, color_discrete_map=paleta_mestra, text='Rotulo', orientation='v')
+                fig = px.bar(resumo_df, x=coluna_foco, y='Geometria_Calc', color=coluna_sec if coluna_sec else coluna_foco, 
+                             color_discrete_map=None if coluna_sec else paleta_mestra, barmode="group", text='Rotulo', orientation='v')
                 fig.update_traces(textposition='outside')
-                fig.update_layout(showlegend=False, xaxis_title="", yaxis_title=und)
+            elif "Linhas" in tipo_grafico:
+                if coluna_sec:
+                    fig = px.line(resumo_df, x=coluna_foco, y='Geometria_Calc', color=coluna_sec, markers=True)
+                else:
+                    fig = px.line(resumo_df, x=coluna_foco, y='Geometria_Calc', markers=True)
+            elif "Radar" in tipo_grafico:
+                if coluna_sec:
+                    fig = px.line_polar(resumo_df, r='Geometria_Calc', theta=coluna_foco, color=coluna_sec, line_close=True)
+                else:
+                    fig = px.line_polar(resumo_df, r='Geometria_Calc', theta=coluna_foco, line_close=True)
             
-            fig.update_layout(title=f"Proporção Recalculada", margin=dict(t=50, b=0, l=0, r=0))
+            fig.update_layout(title=f"Cruzamento Métrico Integrado", margin=dict(t=50, b=0, l=0, r=0))
             st.plotly_chart(fig, use_container_width=True)
             
-            st.markdown(f"**Resumo Tabular ({und.split(' ')[0]})**")
-            df_visual = resumo_df[[coluna_foco, 'Geometria_Calc', '%']].copy()
-            # Nomeia a tabela exatamente com a coluna que o usuário escolheu analisar
-            df_visual.columns = [coluna_foco, und, 'Proporção (%)']
+            st.markdown(f"**Resumo Tabular Selecionado ({und.split(' ')[0]})**")
+            df_visual = resumo_df[group_cols + ['Geometria_Calc', '%']].copy()
+            df_visual.columns = group_cols + [und, 'Proporção (%)']
             df_visual[und] = df_visual[und].round(3)
             df_visual['Proporção (%)'] = df_visual['Proporção (%)'].round(2)
             st.dataframe(df_visual, hide_index=True, use_container_width=True)
@@ -355,17 +362,17 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             def estilo_lab(feature):
                 geom_type = feature['geometry']['type']
                 valor = str(feature['properties'].get(coluna_foco, '')).strip().upper()
-                cor = paleta_mestra.get(valor, '#000000')
+                cor = paleta_mestra.get(valor, '#969696')
                 if geom_type in ['LineString', 'MultiLineString']:
                     return {'color': cor, 'weight': 4, 'opacity': 1}
                 elif geom_type in ['Point', 'MultiPoint']:
                     return {'color': 'black', 'fillColor': cor, 'weight': 1, 'fillOpacity': 0.85, 'radius': 5}
                 return {'fillColor': cor, 'color': '#222222', 'weight': 1, 'fillOpacity': 0.85}
 
-            fg_lab = folium.FeatureGroup(name=f"Análise: {camada_nome}")
+            fg_lab = folium.FeatureGroup(name=f"Análise Completa: {camada_nome}")
             folium.GeoJson(
                 gdf_wgs84,
-                name="Resultado_Clip",
+                name="Resultado_Total",
                 style_function=estilo_lab,
                 marker=folium.CircleMarker(radius=5),
                 tooltip=folium.GeoJsonTooltip(fields=[coluna_foco], aliases=[f"{coluna_foco}: "]),
@@ -376,8 +383,61 @@ elif modo_analise == "2. Laboratório de Geoprocessamento":
             folium.LayerControl(collapsed=False).add_to(m_lab)
             st_folium(m_lab, use_container_width=True, height=500, key="mapa_lab", return_on_hover=False)
 
-        with st.expander(f"📋 Tabela Completa do Recorte (Spatial Join)"):
-            st.caption("Atributos originais após o recorte. Colunas redundantes geradas pelo algoritmo foram removidas.")
+        # --- SEÇÃO DE EXPORTAÇÃO ESPACIAL DE ALTA FIDELIDADE ---
+        st.markdown("---")
+        st.subheader("📥 Exportação Avançada de Dados Geográficos")
+        st.caption("Baixe os dados espaciais resultantes recalcitrados para uso direto em softwares SIG (ArcGIS, QGIS ou Google Earth).")
+        
+        exp_col1, exp_col2, exp_col3 = st.columns(3)
+        
+        # 1. Exportar GeoJSON
+        geojson_str = gdf_trabalho.to_crs(epsg=4326).to_json()
+        exp_col1.download_button(
+            label="🌍 Baixar como arquivo GeoJSON",
+            data=geojson_str,
+            file_name=f"analise_{camada_nome.lower().replace(' ', '_')}.geojson",
+            mime="application/json",
+            use_container_width=True
+        )
+        
+        # 2. Exportar KML
+        try:
+            kml_buffer = io.BytesIO()
+            gpd.io.file.fiona.drvsupport.supported_drivers['KML'] = 'rw'
+            gdf_trabalho.to_crs(epsg=4326).to_file(kml_buffer, driver="KML")
+            exp_col2.download_button(
+                label="🗺️ Baixar como arquivo KML",
+                data=kml_buffer.getvalue(),
+                file_name=f"analise_{camada_nome.lower().replace(' ', '_')}.kml",
+                mime="application/vnd.google-earth.kml+xml",
+                use_container_width=True
+            )
+        except Exception as e:
+            exp_col2.info("Formato KML disponível via conversão padrão no QGIS.")
+
+        # 3. Exportar ESRI Shapefile (Zipped)
+        try:
+            shp_buffer = io.BytesIO()
+            with zipfile.ZipFile(shp_buffer, 'w') as zf:
+                import tempfile
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    path_tmp = Path(tmpdir)
+                    gdf_trabalho.to_file(path_tmp / "analise_gis.shp")
+                    for file_path in path_tmp.iterdir():
+                        zf.write(file_path, arcname=file_path.name)
+            exp_col3.download_button(
+                label="📦 Baixar como ESRI Shapefile (.ZIP)",
+                data=shp_buffer.getvalue(),
+                file_name=f"shapefile_{camada_nome.lower().replace(' ', '_')}.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
+        except Exception as e:
+            exp_col3.warning("Erro ao empacotar Shapefile.")
+
+        # Tabela completa (Contabilizando TODOS os dados originais e unidos)
+        with st.expander(f"📋 Tabela de Atributos Combinada Completa (Integridade Total)"):
+            st.caption("Esta tabela apresenta a totalidade dos dados combinados espaciais, preservando linhas sem correspondência direta.")
             df_final = gdf_trabalho.drop(columns=['geometry']).copy()
             cols_limpas = [c for c in df_final.columns if not c.endswith('_1') and not c.endswith('_2')]
             df_final = df_final[cols_limpas]
@@ -393,7 +453,7 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens)":
     st.markdown("---")
 
     if not mapas_estaticos:
-        st.info("💡 Nenhuma imagem (PNG, JPG, JPEG) foi encontrada. Adicione seus mapas finalizados na pasta do repositório para que apareçam aqui automaticamente.")
+        st.info("💡 Nenhuma imagem (PNG, JPG, JPEG) foi encontrada na pasta data/images. Adicione seus arquivos para listagem automática.")
     else:
         col_selecao, col_download = st.columns([3, 1])
         
