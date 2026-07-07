@@ -3,6 +3,7 @@ import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 import plotly.express as px
+import plotly.graph_objects as go
 from pathlib import Path
 import pandas as pd
 import io
@@ -28,13 +29,18 @@ st.title("💧 WebGIS com Sistema de Inteligência Geográfica: Análise dos Sis
 st.markdown("**Análise Espacial, Ecodinâmica e Geoprocessamento Dinâmico**")
 
 # =====================================================================
-# 2. RADAR DE ARQUIVOS (Busca todos os .geojson e imagens na pasta)
+# 2. RADAR DE ARQUIVOS (OTIMIZADO PARA NUVEM)
 # =====================================================================
 BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent if BASE_DIR.name == "VSCODE" else BASE_DIR
 
-# Radar de GeoJSON
-todos_arquivos = [f for f in REPO_DIR.rglob("*") if f.suffix.lower() == '.geojson']
+# Aponta direto para a pasta 'data' para evitar ler os arquivos do servidor
+DATA_DIR = REPO_DIR / "data"
+if not DATA_DIR.exists():
+    DATA_DIR = REPO_DIR # Fallback se a pasta data não existir
+
+# Radar de GeoJSON (Busca ultrarrápida filtrada)
+todos_arquivos = list(DATA_DIR.rglob("*.geojson"))
 
 if not todos_arquivos:
     st.error("⚠️ Nenhum arquivo '.geojson' encontrado na pasta data!")
@@ -46,9 +52,11 @@ for arquivo in sorted(todos_arquivos):
     nome_legivel = nome_legivel.replace("Ana", "ANA").replace("Map Biomas", "MapBiomas").replace("Ibge", "IBGE")
     mapas_encontrados[nome_legivel] = arquivo
 
-# Radar de Imagens para o Atlas Cartográfico
-extensoes_img = ['.png', '.jpg', '.jpeg']
-todas_imagens = [f for f in REPO_DIR.rglob("*") if f.suffix.lower() in extensoes_img]
+# Radar de Imagens para o Atlas Cartográfico (Ignora pastas do sistema)
+todas_imagens = []
+for ext in ['*.png', '*.jpg', '*.jpeg', '*.PNG', '*.JPG', '*.JPEG']:
+    todas_imagens.extend(DATA_DIR.rglob(ext))
+    
 mapas_estaticos = {f.stem.replace("_", " ").title(): f for f in sorted(todas_imagens)}
 
 @st.cache_data(show_spinner=False)
@@ -96,9 +104,9 @@ modo_analise = st.sidebar.radio(
 st.sidebar.markdown("---")
 
 # =====================================================================
-# MODO 1: VISÃO GERAL
+# MODO 1: VISÃO GERAL (StoryMap Interativo)
 # =====================================================================
-if modo_analise == "1. Visão Geral":
+if modo_analise == "1. Visão Geral (StoryMap)":
     
     with st.expander("📖 Metodologia: Ecodinâmica de Tricart", expanded=False):
         st.markdown("A modelagem de vulnerabilidade integra a dimensão do meio físico e a pressão antrópica por Álgebra de Mapas.")
@@ -212,7 +220,7 @@ if modo_analise == "1. Visão Geral":
 # =====================================================================
 # MODO 2: LABORATÓRIO DE GEOPROCESSAMENTO (Recorte, Join Inclusivo e BI)
 # =====================================================================
-elif modo_analise == "2. Análise de Dados":
+elif modo_analise == "2. Laboratório de Geoprocessamento":
     st.sidebar.subheader("🎯 1. Camada de Estudo")
     camada_alvo = st.sidebar.selectbox("O que será analisado/recortado?", list(mapas_encontrados.keys()), index=0)
     gdf_alvo_bruto = carregar_mapa(str(mapas_encontrados[camada_alvo]))
@@ -267,9 +275,6 @@ elif modo_analise == "2. Análise de Dados":
         camada_nome = st.session_state["nome_camada_ativa"]
         und = st.session_state["unidade_medida"]
 
-        # =======================================================
-        # BLINDAGEM DE COLUNAS (Evita KeyError se o overlay renomear algo com _1 ou _2)
-        # =======================================================
         if coluna_foco not in gdf_trabalho.columns:
             if f"{coluna_foco}_1" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_1"
             elif f"{coluna_foco}_2" in gdf_trabalho.columns: coluna_foco = f"{coluna_foco}_2"
@@ -278,7 +283,6 @@ elif modo_analise == "2. Análise de Dados":
             if f"{coluna_sec}_1" in gdf_trabalho.columns: coluna_sec = f"{coluna_sec}_1"
             elif f"{coluna_sec}_2" in gdf_trabalho.columns: coluna_sec = f"{coluna_sec}_2"
         
-        # Garante conversão limpa e segura (Evita TypeError de ordenação)
         gdf_trabalho[coluna_foco] = gdf_trabalho[coluna_foco].fillna("SEM DADO").astype(str).str.upper().str.strip()
         if coluna_sec:
             gdf_trabalho[coluna_sec] = gdf_trabalho[coluna_sec].fillna("SEM DADO").astype(str).str.upper().str.strip()
@@ -289,7 +293,6 @@ elif modo_analise == "2. Análise de Dados":
         with controle_col1:
             tipo_grafico = st.selectbox("📊 Formato do Gráfico:", ["Rosca (Donut)", "Pizza Clássica", "Barras Horizontais", "Barras Verticais", "Linhas de Tendência", "Radar Geográfico"])
         with controle_col2:
-            # Opções de filtro higienizadas e ordenadas corretamente
             opcoes_unicas = sorted(list(gdf_trabalho[coluna_foco].unique()))
             filtro_usuario = st.multiselect(
                 "🔍 Filtrar Resultados da Análise? (Limpe para ver tudo)", 
@@ -449,13 +452,13 @@ elif modo_analise == "2. Análise de Dados":
 # =====================================================================
 # MODO 3: ATLAS CARTOGRÁFICO (Visualização de Imagens)
 # =====================================================================
-elif modo_analise == "3. Atlas Cartográfico (Imagens dos Mapas da Pesquisa)":
+elif modo_analise == "3. Atlas Cartográfico (Imagens)":
     st.header("🗺️ Atlas Cartográfico (Mapas de Layout)")
     st.markdown("Visualize ou faça o download dos mapas estáticos em alta resolução produzidos para a pesquisa.")
     st.markdown("---")
 
     if not mapas_estaticos:
-        st.info("💡 Nenhuma imagem (PNG, JPG, JPEG) foi encontrada na pasta data/images. Adicione seus arquivos para listagem automática.")
+        st.info("💡 Nenhuma imagem (PNG, JPG, JPEG) foi encontrada na pasta data. Adicione seus arquivos para listagem automática.")
     else:
         col_selecao, col_download = st.columns([3, 1])
         
@@ -469,7 +472,7 @@ elif modo_analise == "3. Atlas Cartográfico (Imagens dos Mapas da Pesquisa)":
             with open(caminho_imagem, "rb") as file:
                 tipo_mime = "image/png" if caminho_imagem.suffix.lower() == '.png' else "image/jpeg"
                 st.download_button(
-                    label="📥 Baixar Imagem",
+                    label="📥 Baixar Imagem em Alta",
                     data=file,
                     file_name=caminho_imagem.name,
                     mime=tipo_mime,
