@@ -30,7 +30,7 @@ st.markdown("**Análise Espacial, Ecodinâmica e Geoprocessamento Dinâmico**")
 # =====================================================================
 # 2. RADAR DE ARQUIVOS (OTIMIZADO PARA AMBIENTE CLOUD)
 # =====================================================================
-# Mapeia os arquivos na pasta 'data'
+# Mapeia dinamicamente os arquivos na pasta 'data', ignorando o sistema do servidor
 BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent if BASE_DIR.name == "VSCODE" else BASE_DIR
 
@@ -102,14 +102,13 @@ def adicionar_elementos_cartograficos(mapa_folium):
     folium.TileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', attr='Google', name='Satélite Puro (Google)', overlay=False, control=True).add_to(mapa_folium)
     folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google', name='Satélite Híbrido (Google)', overlay=False, control=True).add_to(mapa_folium)
     folium.TileLayer('OpenStreetMap', name='Street Maps (OSM)', control=True).add_to(mapa_folium)
-    folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='OpenTopoMap', name='Topografia (Curvas de Nível)', overlay=False, control=True).add_to(m_geral)
     
     # Adição da Coordenada Geográfica dinâmica no ponteiro do mouse
     MousePosition(position='bottomright', separator=' | ', empty_string='Fora do Mapa', num_digits=5, prefix='Coordenada:').add_to(mapa_folium)
     
     # Rosa dos Ventos (Norte Geográfico) inserida no canto superior
     url_norte = 'https://upload.wikimedia.org/wikipedia/commons/9/99/Compass_rose_simple.svg'
-    FloatImage(url_norte, top=50, left=5).add_to(mapa_folium) # Posicionamento relativo em CSS
+    FloatImage(url_norte, top=70, left=10).add_to(mapa_folium) # Posicionamento relativo em CSS
 
 # =====================================================================
 # 4. PAINEL LATERAL (CONTROLE GERAL)
