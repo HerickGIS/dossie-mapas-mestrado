@@ -555,5 +555,5 @@ st.sidebar.markdown("*Graduado, Laureado e Mestre em Geografia pela UERN* | *Ge�
 st.sidebar.markdown("Pesquisa de Mestrado sobre a Análise dos Sistemas Ambientais da Bacia Hidrográfica do Rio do Carmo (RN) utilizando análise de dados com Álgebra de Mapas e princípios da Ecodinâmica.")
 st.sidebar.markdown("---")
 st.sidebar.markdown("*Para mais informações*")
-st.sidebar.markdown("💼 [Acessar meu LinkedIn](https://www.linkedin.com/in/herick-santos-3900a61b)")
+st.sidebar.markdown("💼 [Acessar meu LinkedIn](www.linkedin.com/in/herick-santos-3900a61b8)")
 st.sidebar.markdown("📚 [Dissertação de Mestrado (UERN)](https://sucupira-legado.capes.gov.br/sucupira/public/consultas/coleta/trabalhoConclusao/viewTrabalhoConclusao.jsf?popup=true&id_trabalho=15178165)")
